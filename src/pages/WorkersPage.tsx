@@ -25,6 +25,7 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
   const workerPayments = useAppStore((s) => s.workerPayments);
   const loading = useAppStore((s) => s.loading);
   const initialized = useAppStore((s) => s.initialized);
+  const isInitialLoading = loading && !initialized;
   const createWorker = useAppStore((s) => s.createWorker);
   const recordWorkerPayment = useAppStore((s) => s.recordWorkerPayment);
 
@@ -210,10 +211,28 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
 
       {/* Workers Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {loading && !initialized ? (
-          <div className="col-span-full py-8 text-center text-xs text-[#636B76]">
-            Loading staff list...
-          </div>
+        {isInitialLoading ? (
+          Array.from({ length: 4 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-5 space-y-3 shadow-xs flex flex-col justify-between"
+            >
+              <div className="space-y-2">
+                <div className="h-4 w-32 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                <div className="h-3 w-24 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                <div className="h-3 w-28 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              </div>
+              <div className="space-y-2.5">
+                <div className="bg-[#F8F9FA] dark:bg-[#20242A] p-3 rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35]">
+                  <div className="h-3.5 w-full rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-9 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                  <div className="w-16 h-9 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                </div>
+              </div>
+            </div>
+          ))
         ) : workers.length === 0 ? (
           <div className="col-span-full py-8 text-center text-xs text-[#636B76]">
             No staff added yet. Click &quot;+ Add Staff&quot; to begin.
@@ -294,6 +313,7 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
         data={filteredPayments}
         columns={paymentColumns}
         keyExtractor={(p) => p.id}
+        loading={isInitialLoading}
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="Search staff or note..."

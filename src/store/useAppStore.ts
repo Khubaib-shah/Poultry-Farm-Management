@@ -409,9 +409,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     try {
       const created = await api.createPurchase(data);
-      // Sync in background so canonical loadNumber & IDs arrive
+      const mergedLoad = { ...optimisticLoad, ...created };
+      set((s) => ({
+        purchases: s.purchases.map((p) => (p.id === tempId ? mergedLoad : p)),
+        dealerTransactions: s.dealerTransactions.map((t) =>
+          t.referenceId === tempId ? { ...t, referenceId: created.id } : t
+        ),
+      }));
       void get().refreshInBackground();
-      return { ...optimisticLoad, ...created };
+      return mergedLoad;
     } catch (err: any) {
       const msg = err?.message || 'Failed to save purchase load. Reverted changes.';
       set({ ...snapshot, globalError: msg });
@@ -779,10 +785,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
       batchesConsumed: fifoResult.consumedBatches,
     };
 
-    get().addToast('Counter sale recorded & stock updated!', 'success');
+    get().addToast('Sale saved!', 'success');
 
     try {
       const res = await api.createOwnShopSale(data);
+      if (res?.sale) {
+        const mergedSale = { ...optimisticSale, ...res.sale };
+        set((s) => ({
+          sales: s.sales.map((item) => (item.id === tempId ? mergedSale : item)),
+        }));
+      }
       void get().refreshInBackground();
       return res;
     } catch (err: any) {
@@ -893,6 +905,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     try {
       const res = await api.createWholesaleSale(data);
+      if (res?.sale) {
+        const mergedSale = { ...optimisticSale, ...res.sale };
+        set((s) => ({
+          sales: s.sales.map((item) => (item.id === tempId ? mergedSale : item)),
+        }));
+      }
       void get().refreshInBackground();
       return res;
     } catch (err: any) {
@@ -1050,8 +1068,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     try {
       const created = await api.createShop(data);
+      const mergedShop = { ...optimisticShop, ...created };
+      set((s) => ({
+        shops: s.shops
+          .map((sh) => (sh.id === tempId ? mergedShop : sh))
+          .sort((a, b) => a.shopName.localeCompare(b.shopName)),
+      }));
       void get().refreshInBackground();
-      return { ...optimisticShop, ...created };
+      return mergedShop;
     } catch (err: any) {
       const msg = err?.message || 'Failed to add shop. Reverted.';
       set({ ...snapshot, globalError: msg });
@@ -1086,8 +1110,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     try {
       const created = await api.createWorker(data);
+      const mergedWorker = { ...optimisticWorker, ...created };
+      set((s) => ({
+        workers: s.workers
+          .map((w) => (w.id === tempId ? mergedWorker : w))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      }));
       void get().refreshInBackground();
-      return { ...optimisticWorker, ...created };
+      return mergedWorker;
     } catch (err: any) {
       const msg = err?.message || 'Failed to add worker. Reverted.';
       set({ ...snapshot, globalError: msg });

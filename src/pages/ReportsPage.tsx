@@ -11,6 +11,7 @@ import {
   Check,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { motion } from 'motion/react';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { computeReportFromCollections, getLocalPakistanDate } from '../utils/syncCalculations.ts';
@@ -36,6 +37,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
   const dealerTransactions = useAppStore((s) => s.dealerTransactions);
   const loading = useAppStore((s) => s.loading);
   const initialized = useAppStore((s) => s.initialized);
+  const isInitialLoading = loading && !initialized;
 
   const todayStr = getLocalPakistanDate();
   const [rangeType, setRangeType] = useState<'today' | 'yesterday' | 'weekly' | 'monthly' | 'all' | 'custom'>('monthly');
@@ -585,10 +587,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
                   key={btn.id}
                   type="button"
                   onClick={() => handleSelectPreset(btn.id)}
-                  className={`w-full px-3.5 py-2.5 text-xs flex items-center justify-between transition cursor-pointer ${
+                  className={`w-full px-3.5 py-2.5 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
                     active
-                      ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5] font-bold'
-                      : 'text-[#4A515B] dark:text-[#A3AAB3] font-medium'
+                      ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
+                      : 'text-[#4A515B] dark:text-[#A3AAB3]'
                   }`}
                 >
                   <span>{btn.label}</span>
@@ -598,22 +600,32 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             })}
           </div>
 
-          {/* Tablet / Desktop: Single-row Pills */}
-          <div className="hidden md:inline-flex items-center gap-0.5 p-1 rounded-full bg-[#F8F9FA] dark:bg-[#1F2328] border border-[#E3E6E8] dark:border-[#2A2F35]">
-            {periodPresets.map((btn) => (
-              <button
-                key={btn.id}
-                type="button"
-                onClick={() => handleSelectPreset(btn.id)}
-                className={`px-3 py-1.5 text-[11px] rounded-full font-bold transition focus:outline-none cursor-pointer whitespace-nowrap ${
-                  rangeType === btn.id
-                    ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
-                    : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
-                }`}
-              >
-                {btn.label}
-              </button>
-            ))}
+          {/* Tablet / Desktop: Single-row Pills with Smooth Sliding Highlight */}
+          <div className="hidden md:inline-flex items-center gap-0.5 p-1 rounded-full bg-[#F8F9FA] dark:bg-[#1F2328] border border-[#E3E6E8] dark:border-[#2A2F35] shrink-0">
+            {periodPresets.map((btn) => {
+              const active = rangeType === btn.id;
+              return (
+                <button
+                  key={btn.id}
+                  type="button"
+                  onClick={() => handleSelectPreset(btn.id)}
+                  className={`relative px-3 py-1.5 text-[11px] rounded-full font-semibold transition-colors focus:outline-none cursor-pointer whitespace-nowrap shrink-0 ${
+                    active
+                      ? 'text-[#14161A] dark:text-[#F2F4F5]'
+                      : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
+                  }`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="reportsPeriodPill"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
+                    />
+                  )}
+                  <span className="relative z-10">{btn.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -651,50 +663,99 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <div className="rounded-[18px] p-4 bg-[#C9C3F5] text-[#14161A]">
           <div className="text-[10px] font-extrabold uppercase tracking-wider opacity-80">Money From Sales</div>
-          <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.totalRevenue)}</div>
-          <div className="text-[11px] font-semibold mt-1">{formatNumber(sum.totalPiecesSold)} birds sold</div>
+          {isInitialLoading ? (
+            <>
+              <div className="h-6 w-28 rounded bg-black/10 animate-pulse mt-1.5" />
+              <div className="h-3.5 w-20 rounded bg-black/10 animate-pulse mt-2" />
+            </>
+          ) : (
+            <>
+              <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.totalRevenue)}</div>
+              <div className="text-[11px] font-semibold mt-1">{formatNumber(sum.totalPiecesSold)} birds sold</div>
+            </>
+          )}
         </div>
 
         <div className="rounded-[18px] p-4 bg-[#A9C8FA] text-[#14161A]">
           <div className="text-[10px] font-extrabold uppercase tracking-wider opacity-80">What Sold Birds Cost</div>
-          <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.cogs)}</div>
+          {isInitialLoading ? (
+            <div className="h-6 w-28 rounded bg-black/10 animate-pulse mt-1.5" />
+          ) : (
+            <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.cogs)}</div>
+          )}
           <div className="text-[11px] font-semibold mt-1">Purchase + truck costs</div>
         </div>
 
         <div className="rounded-[18px] p-4 bg-[#92E2B3] text-[#14161A]">
           <div className="text-[10px] font-extrabold uppercase tracking-wider opacity-80">Profit Before Bills</div>
-          <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.grossProfit)}</div>
-          <div className="text-[11px] font-semibold mt-1">{sum.grossMarginPercent}% profit</div>
+          {isInitialLoading ? (
+            <>
+              <div className="h-6 w-28 rounded bg-black/10 animate-pulse mt-1.5" />
+              <div className="h-3.5 w-16 rounded bg-black/10 animate-pulse mt-2" />
+            </>
+          ) : (
+            <>
+              <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.grossProfit)}</div>
+              <div className="text-[11px] font-semibold mt-1">{sum.grossMarginPercent}% profit</div>
+            </>
+          )}
         </div>
 
         <div className="rounded-[18px] p-4 bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35]">
           <div className="text-[10px] font-extrabold uppercase tracking-wider text-[#636B76] dark:text-[#8A929C]">
             Shop Bills & Staff Pay
           </div>
-          <div className="text-lg font-black font-mono mt-1 text-[#14161A] dark:text-white">
-            {formatPKR(sum.generalExpenses + sum.workerPayments)}
-          </div>
-          <div className="text-[11px] text-[#636B76] dark:text-[#8A929C] mt-1">
-            Bills: {formatPKR(sum.generalExpenses)} · Staff: {formatPKR(sum.workerPayments)}
-          </div>
+          {isInitialLoading ? (
+            <>
+              <div className="h-6 w-28 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse mt-1.5" />
+              <div className="h-3.5 w-32 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse mt-2" />
+            </>
+          ) : (
+            <>
+              <div className="text-lg font-black font-mono mt-1 text-[#14161A] dark:text-white">
+                {formatPKR(sum.generalExpenses + sum.workerPayments)}
+              </div>
+              <div className="text-[11px] text-[#636B76] dark:text-[#8A929C] mt-1">
+                Bills: {formatPKR(sum.generalExpenses)} · Staff: {formatPKR(sum.workerPayments)}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="rounded-[18px] p-4 bg-[#F6E7A1] text-[#14161A]">
           <div className="text-[10px] font-extrabold uppercase tracking-wider opacity-80">Final Profit In Hand</div>
-          <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.netProfit)}</div>
-          <div className="text-[11px] font-semibold mt-1">{sum.netMarginPercent}% left over</div>
+          {isInitialLoading ? (
+            <>
+              <div className="h-6 w-28 rounded bg-black/10 animate-pulse mt-1.5" />
+              <div className="h-3.5 w-20 rounded bg-black/10 animate-pulse mt-2" />
+            </>
+          ) : (
+            <>
+              <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.netProfit)}</div>
+              <div className="text-[11px] font-semibold mt-1">{sum.netMarginPercent}% left over</div>
+            </>
+          )}
         </div>
 
         <div className="rounded-[18px] p-4 bg-[#ECF8B5] dark:bg-[#222B18] text-[#14161A] dark:text-[#F2F4F5] border border-[#D4F56B]/70 dark:border-[#D4F56B]/30">
           <div className="text-[10px] font-extrabold uppercase tracking-wider text-[#14161A]/75 dark:text-[#A3AAB3]">
             Birds Still In Shop
           </div>
-          <div className="text-lg font-black font-mono text-[#14161A] dark:text-[#D4F56B] mt-1">
-            {formatPKR(data.stockValuation?.totalValue || 0)}
-          </div>
-          <div className="text-[11px] font-semibold text-[#14161A]/80 dark:text-[#A3AAB3] mt-1">
-            {formatNumber(data.stockValuation?.totalPieces || 0)} birds left
-          </div>
+          {isInitialLoading ? (
+            <>
+              <div className="h-6 w-28 rounded bg-black/10 dark:bg-white/10 animate-pulse mt-1.5" />
+              <div className="h-3.5 w-20 rounded bg-black/10 dark:bg-white/10 animate-pulse mt-2" />
+            </>
+          ) : (
+            <>
+              <div className="text-lg font-black font-mono text-[#14161A] dark:text-[#D4F56B] mt-1">
+                {formatPKR(data.stockValuation?.totalValue || 0)}
+              </div>
+              <div className="text-[11px] font-semibold text-[#14161A]/80 dark:text-[#A3AAB3] mt-1">
+                {formatNumber(data.stockValuation?.totalPieces || 0)} birds left
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -705,41 +766,54 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
           <h4 className="text-xs font-bold uppercase tracking-wider text-[#14161A] dark:text-[#F2F4F5]">
             Where Sales Came From
           </h4>
-          <div className="space-y-3 text-xs">
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <span className="font-semibold text-[#14161A] dark:text-[#F2F4F5]">
-                  Walk-in Shop ({ownShopCount})
-                </span>
-                <span className="font-mono font-bold">
-                  {formatPKR(sum.ownShopRevenue)} ({ownShopPct}%)
-                </span>
+          {isInitialLoading ? (
+            <div className="space-y-3 py-1">
+              <div className="space-y-1.5">
+                <div className="h-3.5 w-full rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                <div className="h-2 w-full rounded-full bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
               </div>
-              <div className="h-2 rounded-full bg-[#F3F5F6] dark:bg-[#20242A] overflow-hidden">
-                <div
-                  style={{ width: `${Math.max(ownShopRevenueBar(ownShopPct), 0)}%` }}
-                  className="h-full rounded-full bg-[#C9C3F5]"
-                />
+              <div className="space-y-1.5">
+                <div className="h-3.5 w-full rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                <div className="h-2 w-full rounded-full bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
               </div>
             </div>
+          ) : (
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <span className="font-semibold text-[#14161A] dark:text-[#F2F4F5]">
+                    Walk-in Shop ({ownShopCount})
+                  </span>
+                  <span className="font-mono font-bold">
+                    {formatPKR(sum.ownShopRevenue)} ({ownShopPct}%)
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-[#F3F5F6] dark:bg-[#20242A] overflow-hidden">
+                  <div
+                    style={{ width: `${Math.max(ownShopRevenueBar(ownShopPct), 0)}%` }}
+                    className="h-full rounded-full bg-[#C9C3F5]"
+                  />
+                </div>
+              </div>
 
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <span className="font-semibold text-[#14161A] dark:text-[#F2F4F5]">
-                  Other Shops ({wholesaleCount})
-                </span>
-                <span className="font-mono font-bold">
-                  {formatPKR(sum.wholesaleRevenue)} ({wholesalePct}%)
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-[#F3F5F6] dark:bg-[#20242A] overflow-hidden">
-                <div
-                  style={{ width: `${Math.max(ownShopRevenueBar(wholesalePct), 0)}%` }}
-                  className="h-full rounded-full bg-[#A9C8FA]"
-                />
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <span className="font-semibold text-[#14161A] dark:text-[#F2F4F5]">
+                    Other Shops ({wholesaleCount})
+                  </span>
+                  <span className="font-mono font-bold">
+                    {formatPKR(sum.wholesaleRevenue)} ({wholesalePct}%)
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-[#F3F5F6] dark:bg-[#20242A] overflow-hidden">
+                  <div
+                    style={{ width: `${Math.max(ownShopRevenueBar(wholesalePct), 0)}%` }}
+                    className="h-full rounded-full bg-[#A9C8FA]"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Card 2: Shop Expenses by Type */}
@@ -747,7 +821,13 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
           <h4 className="text-xs font-bold uppercase tracking-wider text-[#14161A] dark:text-[#F2F4F5]">
             Shop Bills by Type
           </h4>
-          {expenseCategories.length === 0 ? (
+          {isInitialLoading ? (
+            <div className="space-y-3 py-1">
+              <div className="h-3.5 w-full rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              <div className="h-2 w-full rounded-full bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              <div className="h-3.5 w-4/5 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+            </div>
+          ) : expenseCategories.length === 0 ? (
             <p className="text-xs text-[#636B76] dark:text-[#8A929C] py-2">
               No shop bills in this period.
             </p>
@@ -785,19 +865,35 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
           <div className="space-y-2 text-xs">
             <div className="flex justify-between py-1 border-b border-[#E3E6E8] dark:border-[#2A2F35]">
               <span className="text-[#636B76] dark:text-[#8A929C]">Weight Bought:</span>
-              <span className="font-mono font-bold">{formatNumber(sum.totalPurchasesWeight)} KG</span>
+              {isInitialLoading ? (
+                <div className="h-3.5 w-16 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              ) : (
+                <span className="font-mono font-bold">{formatNumber(sum.totalPurchasesWeight)} KG</span>
+              )}
             </div>
             <div className="flex justify-between py-1 border-b border-[#E3E6E8] dark:border-[#2A2F35]">
               <span className="text-[#636B76] dark:text-[#8A929C]">Truck Bird Bills:</span>
-              <span className="font-mono font-bold">{formatPKR(sum.totalPurchasesAmount)}</span>
+              {isInitialLoading ? (
+                <div className="h-3.5 w-24 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              ) : (
+                <span className="font-mono font-bold">{formatPKR(sum.totalPurchasesAmount)}</span>
+              )}
             </div>
             <div className="flex justify-between py-1 border-b border-[#E3E6E8] dark:border-[#2A2F35]">
               <span className="text-[#636B76] dark:text-[#8A929C]">Diesel & Driver Pay:</span>
-              <span className="font-mono font-bold">{formatPKR(sum.totalLoadExpenses)}</span>
+              {isInitialLoading ? (
+                <div className="h-3.5 w-20 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              ) : (
+                <span className="font-mono font-bold">{formatPKR(sum.totalLoadExpenses)}</span>
+              )}
             </div>
             <div className="flex justify-between pt-1">
               <span className="text-[#636B76] dark:text-[#8A929C]">Paid to Dealers:</span>
-              <span className="font-mono font-bold text-[#2FB67C]">{formatPKR(dealerPaidTotal)}</span>
+              {isInitialLoading ? (
+                <div className="h-3.5 w-24 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              ) : (
+                <span className="font-mono font-bold text-[#2FB67C]">{formatPKR(dealerPaidTotal)}</span>
+              )}
             </div>
           </div>
         </div>
@@ -815,10 +911,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveDetailTab(tab.id)}
-                className={`w-full px-4 py-3 text-xs flex items-center justify-between transition cursor-pointer ${
+                className={`w-full px-4 py-3 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
                   active
-                    ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5] font-bold'
-                    : 'text-[#4A515B] dark:text-[#A3AAB3] font-medium'
+                    ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
+                    : 'text-[#4A515B] dark:text-[#A3AAB3]'
                 }`}
               >
                 <span className="flex items-center gap-2.5">
@@ -826,14 +922,14 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
                   <span>{tab.label}</span>
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-white/80 dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35]">
-                  {tab.count}
+                  {isInitialLoading ? '...' : tab.count}
                 </span>
               </button>
             );
           })}
         </div>
 
-        {/* Desktop / Tablet: Single-row Pill Tabs */}
+        {/* Desktop / Tablet: Single-row Pill Tabs with Smooth Sliding Highlight */}
         <div className="hidden md:inline-flex items-center gap-0.5 bg-white dark:bg-[#181B1F] p-1 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] w-fit shadow-xs print:hidden">
           {detailTabs.map((tab) => {
             const Icon = tab.icon;
@@ -843,15 +939,24 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveDetailTab(tab.id)}
-                className={`px-3.5 py-2 rounded-full text-xs font-bold transition focus:outline-none flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                className={`relative px-3.5 py-2 rounded-full text-xs font-semibold transition-colors focus:outline-none flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
                   active
-                    ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
+                    ? 'text-[#14161A] dark:text-[#F2F4F5]'
                     : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span>
-                  {tab.label} ({tab.count})
+                {active && (
+                  <motion.span
+                    layoutId="reportsDetailPill"
+                    transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                    className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-1.5">
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>
+                    {tab.label} ({isInitialLoading ? '...' : tab.count})
+                  </span>
                 </span>
               </button>
             );
@@ -907,6 +1012,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             data={data.purchases || []}
             columns={purchaseColumns}
             keyExtractor={(p) => p.id}
+            loading={isInitialLoading}
             searchPlaceholder="Search load # or supplier..."
             defaultSortKey="purchaseDate"
             defaultSortDir="desc"
@@ -925,6 +1031,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             data={filteredExpenses}
             columns={expenseColumns}
             keyExtractor={(e) => e.id}
+            loading={isInitialLoading}
             searchPlaceholder="Search expense note..."
             defaultSortKey="expenseDate"
             defaultSortDir="desc"
@@ -950,6 +1057,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             data={data.workerPayments || []}
             columns={wageColumns}
             keyExtractor={(w) => w.id}
+            loading={isInitialLoading}
             searchPlaceholder="Search staff member or note..."
             defaultSortKey="paymentDate"
             defaultSortDir="desc"
@@ -966,6 +1074,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             data={data.dealerPayments || []}
             columns={dealerPmtColumns}
             keyExtractor={(t) => t.id}
+            loading={isInitialLoading}
             searchPlaceholder="Search supplier or slip..."
             defaultSortKey="transactionDate"
             defaultSortDir="desc"

@@ -12,6 +12,7 @@ import {
   Calendar,
   Check,
 } from 'lucide-react';
+import { motion } from 'motion/react';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { computeDashboardFromCollections } from '../utils/syncCalculations.ts';
@@ -81,19 +82,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   };
 
-  if (loading && !initialized) {
-    return (
-      <div className="p-12 flex items-center justify-center min-h-[380px]">
-        <div className="text-center">
-          <div className="w-9 h-9 border-3 border-[#D4F56B] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-xs text-[#636B76] dark:text-[#8A929C] font-semibold tracking-wider uppercase">
-            Loading Shop Summary...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+  const isInitialLoading = loading && !initialized;
   const { kpis, charts, recent } = data;
 
   const maxBarValue = Math.max(
@@ -157,10 +146,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     setPeriod(btn.id);
                     setShowCustomDate(false);
                   }}
-                  className={`w-full px-4 py-2.5 text-xs flex items-center justify-between transition cursor-pointer ${
+                  className={`w-full px-4 py-2.5 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
                     active
-                      ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5] font-bold'
-                      : 'text-[#4A515B] dark:text-[#A3AAB3] font-medium'
+                      ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
+                      : 'text-[#4A515B] dark:text-[#A3AAB3]'
                   }`}
                 >
                   <span>{btn.label}</span>
@@ -171,10 +160,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <button
               type="button"
               onClick={() => setShowCustomDate((v) => !v)}
-              className={`w-full px-4 py-2.5 text-xs flex items-center justify-between transition cursor-pointer ${
+              className={`w-full px-4 py-2.5 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
                 period === 'custom' || showCustomDate
-                  ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5] font-bold'
-                  : 'text-[#4A515B] dark:text-[#A3AAB3] font-medium'
+                  ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
+                  : 'text-[#4A515B] dark:text-[#A3AAB3]'
               }`}
             >
               <span className="flex items-center gap-2">
@@ -187,37 +176,61 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </button>
           </div>
 
-          {/* Tablet / Desktop: Single-row Pill Bar */}
-          <div className="hidden sm:inline-flex items-center gap-0.5 bg-white dark:bg-[#181B1F] p-1 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] shadow-xs w-fit">
-            {periodButtons.map((btn) => (
-              <button
-                key={btn.id}
-                type="button"
-                onClick={() => {
-                  setPeriod(btn.id);
-                  setShowCustomDate(false);
-                }}
-                className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition focus:outline-none cursor-pointer whitespace-nowrap ${
-                  period === btn.id
-                    ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
-                    : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
-                }`}
-              >
-                {btn.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setShowCustomDate((v) => !v)}
-              className={`px-3 py-1.5 text-[11px] font-bold rounded-full transition focus:outline-none flex items-center gap-1 cursor-pointer whitespace-nowrap ${
-                period === 'custom' || showCustomDate
-                  ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
-                  : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
-              }`}
-            >
-              <Calendar className="w-3 h-3" />
-              <span>Pick Dates</span>
-            </button>
+          {/* Tablet / Desktop: Single-row Pill Bar with Smooth Sliding Highlight */}
+          <div className="hidden sm:inline-flex items-center gap-0.5 bg-white dark:bg-[#181B1F] p-1 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] shadow-xs w-fit shrink-0">
+            {periodButtons.map((btn) => {
+              const active = period === btn.id && !showCustomDate;
+              return (
+                <button
+                  key={btn.id}
+                  type="button"
+                  onClick={() => {
+                    setPeriod(btn.id);
+                    setShowCustomDate(false);
+                  }}
+                  className={`relative px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors focus:outline-none cursor-pointer whitespace-nowrap shrink-0 ${
+                    active
+                      ? 'text-[#14161A] dark:text-[#F2F4F5]'
+                      : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
+                  }`}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="dashboardPeriodPill"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
+                    />
+                  )}
+                  <span className="relative z-10">{btn.label}</span>
+                </button>
+              );
+            })}
+            {(() => {
+              const isCustomActive = period === 'custom' || showCustomDate;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomDate((v) => !v)}
+                  className={`relative px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors focus:outline-none flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 ${
+                    isCustomActive
+                      ? 'text-[#14161A] dark:text-[#F2F4F5]'
+                      : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
+                  }`}
+                >
+                  {isCustomActive && (
+                    <motion.span
+                      layoutId="dashboardPeriodPill"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    <span>Pick Dates</span>
+                  </span>
+                </button>
+              );
+            })()}
           </div>
 
           {showCustomDate && (
@@ -266,11 +279,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
           </div>
           <div>
-            <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none">
-              {formatPKR(kpis.revenue)}
-            </div>
+            {isInitialLoading ? (
+              <div className="h-7 w-36 rounded-lg bg-black/10 animate-pulse" />
+            ) : (
+              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none">
+                {formatPKR(kpis.revenue)}
+              </div>
+            )}
             <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-[#14161A]/85">
-              <span>{formatNumber(kpis.totalPiecesSold)} birds sold</span>
+              {isInitialLoading ? (
+                <div className="h-4 w-24 rounded-md bg-black/10 animate-pulse" />
+              ) : (
+                <span>{formatNumber(kpis.totalPiecesSold)} birds sold</span>
+              )}
               <span className="bg-white/80 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
                 {periodLabel}
               </span>
@@ -292,14 +313,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
           </div>
           <div>
-            <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono">
-              {formatNumber(kpis.totalAvailableStock)} birds
-            </div>
+            {isInitialLoading ? (
+              <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
+            ) : (
+              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono">
+                {formatNumber(kpis.totalAvailableStock)} birds
+              </div>
+            )}
             <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-[#14161A]/85">
               <span>In shop right now</span>
-              <span className="bg-white/80 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-                {kpis.totalAvailableStock > 200 ? 'Plenty Left' : 'Running Low'}
-              </span>
+              {isInitialLoading ? (
+                <div className="h-5 w-20 rounded-full bg-white/70 animate-pulse" />
+              ) : (
+                <span className="bg-white/80 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
+                  {kpis.totalAvailableStock > 200 ? 'Plenty Left' : 'Running Low'}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -315,13 +344,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
           </div>
           <div>
-            <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none">
-              {formatPKR(kpis.grossProfit)}
-            </div>
+            {isInitialLoading ? (
+              <div className="h-7 w-36 rounded-lg bg-black/10 animate-pulse" />
+            ) : (
+              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none">
+                {formatPKR(kpis.grossProfit)}
+              </div>
+            )}
             <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-[#14161A]/85">
-              <span>Cost of birds: {formatPKR(kpis.cogs)}</span>
+              {isInitialLoading ? (
+                <div className="h-4 w-28 rounded-md bg-black/10 animate-pulse" />
+              ) : (
+                <span>Cost of birds: {formatPKR(kpis.cogs)}</span>
+              )}
               <span className="bg-white/80 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-                {kpis.revenue > 0
+                {isInitialLoading
+                  ? '...'
+                  : kpis.revenue > 0
                   ? `${((kpis.grossProfit / kpis.revenue) * 100).toFixed(1)}%`
                   : '0%'}
               </span>
@@ -340,13 +379,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
           </div>
           <div>
-            <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none">
-              {formatPKR(kpis.netProfit)}
-            </div>
+            {isInitialLoading ? (
+              <div className="h-7 w-36 rounded-lg bg-black/10 animate-pulse" />
+            ) : (
+              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none">
+                {formatPKR(kpis.netProfit)}
+              </div>
+            )}
             <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-[#14161A]/85">
-              <span>Shop bills & pay: {formatPKR(kpis.generalExpenses + kpis.workerPayments)}</span>
+              {isInitialLoading ? (
+                <div className="h-4 w-32 rounded-md bg-black/10 animate-pulse" />
+              ) : (
+                <span>Shop bills & pay: {formatPKR(kpis.generalExpenses + kpis.workerPayments)}</span>
+              )}
               <span className="bg-white/80 text-[#14161A] px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-                {kpis.netProfit >= 0 ? 'Profit' : 'Loss'}
+                {isInitialLoading ? '...' : kpis.netProfit >= 0 ? 'Profit' : 'Loss'}
               </span>
             </div>
           </div>
@@ -370,21 +417,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="flex items-center bg-[#F8F9FA] dark:bg-[#1F2328] border border-[#E3E6E8] dark:border-[#2A2F35] p-1 rounded-full text-[11px] font-bold">
-                  {(['7D', '30D', '90D'] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setChartTimeframe(t)}
-                      className={`px-3 py-1 rounded-full transition focus:outline-none cursor-pointer ${
-                        chartTimeframe === t
-                          ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
-                          : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
+                <div className="flex items-center bg-[#F8F9FA] dark:bg-[#1F2328] border border-[#E3E6E8] dark:border-[#2A2F35] p-1 rounded-full text-[11px] font-semibold">
+                  {(['7D', '30D', '90D'] as const).map((t) => {
+                    const active = chartTimeframe === t;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setChartTimeframe(t)}
+                        className={`relative px-3 py-1 rounded-full transition-colors focus:outline-none cursor-pointer whitespace-nowrap ${
+                          active
+                            ? 'text-[#14161A] dark:text-[#F2F4F5]'
+                            : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
+                        }`}
+                      >
+                        {active && (
+                          <motion.span
+                            layoutId="dashboardChartPill"
+                            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                            className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
+                          />
+                        )}
+                        <span className="relative z-10">{t}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <button
@@ -397,99 +454,121 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
             </div>
 
-            <div className="flex gap-3">
-              {/* Y-Axis Scale */}
-              <div className="hidden sm:flex flex-col justify-between h-48 pt-6 pb-6 text-[10px] font-mono font-semibold text-[#636B76] dark:text-[#8A929C] text-right shrink-0 w-12">
-                <span>{formatShortNum(maxBarValue)}</span>
-                <span>{formatShortNum(Math.round(maxBarValue / 2))}</span>
-                <span>0</span>
+            {isInitialLoading ? (
+              <div className="h-56 flex items-end justify-between gap-3 pt-6 px-4">
+                {[55, 80, 42, 92, 68, 74, 50].map((h, idx) => (
+                  <div key={idx} className="flex-1 flex flex-col items-center gap-2">
+                    <div className="w-full flex items-end justify-center gap-1 h-40">
+                      <div
+                        style={{ height: `${h}%` }}
+                        className="w-1/2 max-w-[22px] rounded-t-[6px] bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse"
+                      />
+                      <div
+                        style={{ height: `${Math.max(25, h - 18)}%` }}
+                        className="w-1/2 max-w-[22px] rounded-t-[6px] bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse"
+                      />
+                    </div>
+                    <div className="h-2.5 w-8 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                  </div>
+                ))}
               </div>
+            ) : (
+              <>
+                <div className="flex gap-3">
+                  {/* Y-Axis Scale */}
+                  <div className="hidden sm:flex flex-col justify-between h-48 pt-6 pb-6 text-[10px] font-mono font-semibold text-[#636B76] dark:text-[#8A929C] text-right shrink-0 w-12">
+                    <span>{formatShortNum(maxBarValue)}</span>
+                    <span>{formatShortNum(Math.round(maxBarValue / 2))}</span>
+                    <span>0</span>
+                  </div>
 
-              <div className="flex-1 overflow-x-auto">
-                <div className="h-56 flex items-end justify-between gap-1.5 sm:gap-2 pt-6 px-1 min-w-[360px] relative">
-                  {(charts.daily || []).map((day) => {
-                    const revHeight =
-                      day.revenue > 0
-                        ? Math.max(16, Math.round((day.revenue / maxBarValue) * 145))
-                        : 3;
-                    const cogsHeight =
-                      day.cogs > 0
-                        ? Math.max(16, Math.round((day.cogs / maxBarValue) * 145))
-                        : 3;
-                    const isSelected = activeDay?.date === day.date;
+                  <div className="flex-1 overflow-x-auto">
+                    <div className="h-56 flex items-end justify-between gap-1.5 sm:gap-2 pt-6 px-1 min-w-[360px] relative">
+                      {(charts.daily || []).map((day) => {
+                        const revHeight =
+                          day.revenue > 0
+                            ? Math.max(16, Math.round((day.revenue / maxBarValue) * 145))
+                            : 3;
+                        const cogsHeight =
+                          day.cogs > 0
+                            ? Math.max(16, Math.round((day.cogs / maxBarValue) * 145))
+                            : 3;
+                        const isSelected = activeDay?.date === day.date;
 
-                    return (
-                      <button
-                        key={day.date}
-                        type="button"
-                        onClick={() => setSelectedChartDate(day.date)}
-                        className={`flex-1 flex flex-col items-center group relative rounded-xl py-1 px-0.5 transition cursor-pointer ${
-                          isSelected ? 'bg-[#F3F5F6] dark:bg-[#20242A]' : 'hover:bg-[#F3F5F6]/50 dark:hover:bg-[#20242A]/50'
+                        return (
+                          <button
+                            key={day.date}
+                            type="button"
+                            onClick={() => setSelectedChartDate(day.date)}
+                            className={`flex-1 flex flex-col items-center group relative rounded-xl py-1 px-0.5 transition cursor-pointer ${
+                              isSelected ? 'bg-[#F3F5F6] dark:bg-[#20242A]' : 'hover:bg-[#F3F5F6]/50 dark:hover:bg-[#20242A]/50'
+                            }`}
+                          >
+                            {day.revenue > 0 && (
+                              <span className="text-[10px] font-mono font-bold text-[#14161A] dark:text-[#F2F4F5] mb-1">
+                                {formatShortNum(day.revenue)}
+                              </span>
+                            )}
+
+                            <div className="w-full flex items-end justify-center space-x-1 h-40">
+                              <div
+                                style={{ height: `${revHeight}px` }}
+                                className={`w-1/2 max-w-[22px] rounded-t-[6px] transition ${
+                                  day.revenue > 0 ? 'bg-[#C9C3F5]' : 'bg-[#E3E6E8] dark:bg-[#2A2F35]'
+                                }`}
+                              />
+                              <div
+                                style={{ height: `${cogsHeight}px` }}
+                                className={`w-1/2 max-w-[22px] rounded-t-[6px] transition ${
+                                  day.cogs > 0 ? 'bg-[#92E2B3]' : 'bg-[#E3E6E8] dark:bg-[#2A2F35]'
+                                }`}
+                              />
+                            </div>
+
+                            <span
+                              className={`text-[10px] sm:text-[11px] font-bold font-mono mt-1.5 truncate w-full text-center ${
+                                isSelected
+                                  ? 'text-[#14161A] dark:text-[#D4F56B]'
+                                  : 'text-[#636B76] dark:text-[#8A929C]'
+                              }`}
+                            >
+                              {day.date}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {activeDay && (
+                  <div className="mt-3 p-3 rounded-[14px] bg-[#F8F9FA] dark:bg-[#20242A] border border-[#E3E6E8] dark:border-[#2A2F35] flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-mono font-bold text-[#14161A] dark:text-[#D4F56B]">
+                      Day {activeDay.date} ({activeDay.piecesSold} birds)
+                    </span>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono">
+                      <span>
+                        Sold: <strong>{formatPKR(activeDay.revenue)}</strong>
+                      </span>
+                      <span>
+                        Bird Cost: <strong>{formatPKR(activeDay.cogs)}</strong>
+                      </span>
+                      <span>
+                        Bills: <strong>{formatPKR(activeDay.expenses)}</strong>
+                      </span>
+                      <span
+                        className={`font-bold ${
+                          activeDay.netProfit >= 0
+                            ? 'text-[#2FB67C]'
+                            : 'text-[#D95C5C] dark:text-[#FF8585]'
                         }`}
                       >
-                        {day.revenue > 0 && (
-                          <span className="text-[10px] font-mono font-bold text-[#14161A] dark:text-[#F2F4F5] mb-1">
-                            {formatShortNum(day.revenue)}
-                          </span>
-                        )}
-
-                        <div className="w-full flex items-end justify-center space-x-1 h-40">
-                          <div
-                            style={{ height: `${revHeight}px` }}
-                            className={`w-1/2 max-w-[22px] rounded-t-[6px] transition ${
-                              day.revenue > 0 ? 'bg-[#C9C3F5]' : 'bg-[#E3E6E8] dark:bg-[#2A2F35]'
-                            }`}
-                          />
-                          <div
-                            style={{ height: `${cogsHeight}px` }}
-                            className={`w-1/2 max-w-[22px] rounded-t-[6px] transition ${
-                              day.cogs > 0 ? 'bg-[#92E2B3]' : 'bg-[#E3E6E8] dark:bg-[#2A2F35]'
-                            }`}
-                          />
-                        </div>
-
-                        <span
-                          className={`text-[10px] sm:text-[11px] font-bold font-mono mt-1.5 truncate w-full text-center ${
-                            isSelected
-                              ? 'text-[#14161A] dark:text-[#D4F56B]'
-                              : 'text-[#636B76] dark:text-[#8A929C]'
-                          }`}
-                        >
-                          {day.date}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {activeDay && (
-              <div className="mt-3 p-3 rounded-[14px] bg-[#F8F9FA] dark:bg-[#20242A] border border-[#E3E6E8] dark:border-[#2A2F35] flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="font-mono font-bold text-[#14161A] dark:text-[#D4F56B]">
-                  Day {activeDay.date} ({activeDay.piecesSold} birds)
-                </span>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono">
-                  <span>
-                    Sold: <strong>{formatPKR(activeDay.revenue)}</strong>
-                  </span>
-                  <span>
-                    Bird Cost: <strong>{formatPKR(activeDay.cogs)}</strong>
-                  </span>
-                  <span>
-                    Bills: <strong>{formatPKR(activeDay.expenses)}</strong>
-                  </span>
-                  <span
-                    className={`font-bold ${
-                      activeDay.netProfit >= 0
-                        ? 'text-[#2FB67C]'
-                        : 'text-[#D95C5C] dark:text-[#FF8585]'
-                    }`}
-                  >
-                    Profit: {formatSignedPKR(activeDay.netProfit)}
-                  </span>
-                </div>
-              </div>
+                        Profit: {formatSignedPKR(activeDay.netProfit)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="mt-3 pt-3 border-t border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-center gap-6 text-xs font-semibold text-[#4A515B] dark:text-[#A3AAB3]">
@@ -539,7 +618,30 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
-                  {recent.sales.length === 0 ? (
+                  {isInitialLoading ? (
+                    Array.from({ length: 4 }).map((_, idx) => (
+                      <tr key={idx}>
+                        <td className="py-3.5 px-4">
+                          <div className="h-3.5 w-20 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="h-5 w-24 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="h-3.5 w-20 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="h-3.5 w-14 ml-auto rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="h-3.5 w-20 ml-auto rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="h-3.5 w-20 ml-auto rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : recent.sales.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-6 text-center text-[#636B76]">
                         No sales recorded yet.
@@ -592,7 +694,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
             {/* Mobile Cards */}
             <div className="md:hidden divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
-              {recent.sales.length === 0 ? (
+              {isInitialLoading ? (
+                Array.from({ length: 3 }).map((_, idx) => (
+                  <div key={idx} className="p-4 flex items-center justify-between gap-3">
+                    <div className="space-y-2 flex-1">
+                      <div className="h-3.5 w-32 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                      <div className="h-3 w-24 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-3.5 w-20 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                      <div className="h-3 w-16 ml-auto rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                    </div>
+                  </div>
+                ))
+              ) : recent.sales.length === 0 ? (
                 <div className="py-6 text-center text-xs text-[#636B76]">No sales recorded yet.</div>
               ) : (
                 recent.sales.slice(0, 5).map((sale) => (
@@ -672,9 +787,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <Users className="w-4 h-4 text-[#4A515B] dark:text-[#A3AAB3]" />
             </div>
 
-            <div className="text-2xl font-black font-mono text-[#F5B544]">
-              {formatPKR(kpis.dealerOutstandingBalance)}
-            </div>
+            {isInitialLoading ? (
+              <div className="h-7 w-36 rounded-lg bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+            ) : (
+              <div className="text-2xl font-black font-mono text-[#F5B544]">
+                {formatPKR(kpis.dealerOutstandingBalance)}
+              </div>
+            )}
 
             <p className="text-xs text-[#4A515B] dark:text-[#A3AAB3]">
               Total unpaid amount owed to chicken truck suppliers.
@@ -705,18 +824,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
 
             <div className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] text-xs">
-              {recent.purchases.slice(0, 3).map((load) => (
-                <div key={load.id} className="py-2.5 first:pt-0 last:pb-0 space-y-0.5">
-                  <div className="flex items-center justify-between font-mono font-bold text-[#14161A] dark:text-white">
-                    <span>{load.loadNumber}</span>
-                    <span>{formatPKR(load.purchaseAmount)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-[#4A515B] dark:text-[#A3AAB3]">
-                    <span className="truncate max-w-[130px]">{load.supplierName}</span>
-                    <span>{formatNumber(load.totalWeightKg)} KG</span>
-                  </div>
-                </div>
-              ))}
+              {isInitialLoading
+                ? Array.from({ length: 3 }).map((_, idx) => (
+                    <div key={idx} className="py-2.5 first:pt-0 last:pb-0 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="h-3.5 w-20 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                        <div className="h-3.5 w-24 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="h-3 w-24 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                        <div className="h-3 w-14 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                      </div>
+                    </div>
+                  ))
+                : recent.purchases.slice(0, 3).map((load) => (
+                    <div key={load.id} className="py-2.5 first:pt-0 last:pb-0 space-y-0.5">
+                      <div className="flex items-center justify-between font-mono font-bold text-[#14161A] dark:text-white">
+                        <span>{load.loadNumber}</span>
+                        <span>{formatPKR(load.purchaseAmount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-[#4A515B] dark:text-[#A3AAB3]">
+                        <span className="truncate max-w-[130px]">{load.supplierName}</span>
+                        <span>{formatNumber(load.totalWeightKg)} KG</span>
+                      </div>
+                    </div>
+                  ))}
             </div>
 
             <button

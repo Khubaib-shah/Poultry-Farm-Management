@@ -32,7 +32,6 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
   const [totalSaleAmount, setTotalSaleAmount] = useState('');
   const [saleNotes, setSaleNotes] = useState('');
 
-  const [lastSaleSummary, setLastSaleSummary] = useState<any | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
 
   const availableStock = useMemo(
@@ -89,13 +88,12 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
     setSaleNotes('');
 
     try {
-      const res = await createOwnShopSale({
+      await createOwnShopSale({
         saleDate,
         quantityPieces: pieces,
         totalSaleAmount: amount,
         notes: notesCopy || undefined,
       });
-      setLastSaleSummary(res.summary);
     } catch {
       // handled by store
     }
@@ -310,7 +308,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
               className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center px-6 py-2.5 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs disabled:opacity-50 gap-2 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Save Sale & Update Stock</span>
+              <span>Save Sale</span>
             </button>
           </div>
         </form>
@@ -355,61 +353,6 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
           </span>
         )}
       />
-
-      {/* POST-SALE SUMMARY MODAL */}
-      {lastSaleSummary && (
-        <Modal
-          isOpen={Boolean(lastSaleSummary)}
-          onClose={() => setLastSaleSummary(null)}
-          title="Sale Saved!"
-          subtitle="Stock updated and profit calculated"
-          maxWidth="md"
-        >
-          <div className="space-y-4 text-xs">
-            <div className="bg-[#92E2B3]/20 border border-[#92E2B3]/40 rounded-[16px] p-4 text-center">
-              <div className="text-xl font-black text-emerald-800 dark:text-[#92E2B3] font-mono">
-                {formatPKR(lastSaleSummary.totalAmount)}
-              </div>
-              <div className="text-xs text-emerald-900 dark:text-[#92E2B3] mt-1">
-                {lastSaleSummary.pieces} birds @ {formatPKR(lastSaleSummary.sellingPricePerPiece)} / bird
-              </div>
-            </div>
-
-            <div className="bg-[#F8F9FA] dark:bg-[#20242A] rounded-[16px] border border-[#E3E6E8] dark:border-[#2A2F35] p-4 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-[#636B76] dark:text-[#8A929C]">Total Sale Cash:</span>
-                <span className="font-mono font-bold">{formatPKR(lastSaleSummary.totalAmount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#636B76] dark:text-[#8A929C]">Bird Purchase Cost:</span>
-                <span className="font-mono">{formatPKR(lastSaleSummary.totalCost)}</span>
-              </div>
-              <div className="flex justify-between border-t border-[#E3E6E8] dark:border-[#2A2F35] pt-2">
-                <span className="font-bold">Profit Made:</span>
-                <span
-                  className={`font-mono font-black text-sm ${
-                    Number(lastSaleSummary.totalProfit) >= 0
-                      ? 'text-[#2FB67C]'
-                      : 'text-[#D95C5C] dark:text-[#FF8585]'
-                  }`}
-                >
-                  {formatSignedPKR(lastSaleSummary.totalProfit)}
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setLastSaleSummary(null)}
-                className="min-h-[42px] px-6 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] cursor-pointer"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
 
       {/* SALE DETAIL MODAL */}
       {selectedSale && (

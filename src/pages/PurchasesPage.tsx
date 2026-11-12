@@ -835,8 +835,8 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
               )}
             </div>
 
-            <div className="border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[18px] overflow-hidden">
-              <div className="px-4 py-3 bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-between">
+            <div className="border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[18px]">
+              <div className="px-4 py-3 bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] rounded-t-[17px] flex items-center justify-between">
                 <span className="font-bold uppercase tracking-wider text-[11px]">
                   Fuel, Loading & Driver Expenses
                 </span>
@@ -894,20 +894,21 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
 
               <form
                 onSubmit={handleAddLoadExpense}
-                className="p-3.5 bg-[#F8F9FA] dark:bg-[#20242A] border-t border-[#E3E6E8] dark:border-[#2A2F35] grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"
+                className="p-3.5 bg-[#F8F9FA] dark:bg-[#20242A] border-t border-[#E3E6E8] dark:border-[#2A2F35] rounded-b-[17px] grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
               >
-                <div className="sm:col-span-3">
+                <div className="sm:col-span-5">
                   <Select
                     size="sm"
+                    placement="up"
                     value={expenseCategory}
                     onChange={setExpenseCategory}
                     options={EXPENSE_CAT_OPTIONS}
                   />
                 </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-3">
                   <input
                     type="number"
-                    placeholder="Amount"
+                    placeholder="Amount (PKR)"
                     value={expenseAmount}
                     onChange={(e) => setExpenseAmount(e.target.value)}
                     className="w-full min-h-[38px] px-3 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F] font-mono"
@@ -915,7 +916,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                     min="1"
                   />
                 </div>
-                <div className="sm:col-span-3">
+                <div className="sm:col-span-4">
                   <input
                     type="date"
                     value={expenseDate}
@@ -923,21 +924,21 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                     className="w-full min-h-[38px] px-2.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F]"
                   />
                 </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-9">
                   <input
                     type="text"
-                    placeholder="Note"
+                    placeholder="Note (optional)"
                     value={expenseDesc}
                     onChange={(e) => setExpenseDesc(e.target.value)}
-                    className="w-full min-h-[38px] px-2.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F]"
+                    className="w-full min-h-[38px] px-3 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F]"
                   />
                 </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-3">
                   <button
                     type="submit"
-                    className="w-full min-h-[38px] px-3 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
+                    className="w-full min-h-[38px] px-3 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer whitespace-nowrap"
                   >
-                    + Add
+                    + Add Cost
                   </button>
                 </div>
               </form>

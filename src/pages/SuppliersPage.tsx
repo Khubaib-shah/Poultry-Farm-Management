@@ -33,6 +33,7 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
   const dealerTransactions = useAppStore((s) => s.dealerTransactions);
   const loading = useAppStore((s) => s.loading);
   const initialized = useAppStore((s) => s.initialized);
+  const isInitialLoading = loading && !initialized;
   const createSupplier = useAppStore((s) => s.createSupplier);
   const recordSupplierPayment = useAppStore((s) => s.recordSupplierPayment);
 
@@ -192,7 +193,11 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
             </div>
           </div>
           <div>
-            <div className="text-[26px] font-black leading-none font-mono">{suppliers.length}</div>
+            {isInitialLoading ? (
+              <div className="h-7 w-12 rounded-lg bg-black/10 animate-pulse" />
+            ) : (
+              <div className="text-[26px] font-black leading-none font-mono">{suppliers.length}</div>
+            )}
             <p className="text-xs font-semibold opacity-85 mt-2">Active poultry farm dealers</p>
           </div>
         </div>
@@ -207,9 +212,13 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
             </div>
           </div>
           <div>
-            <div className="text-[26px] font-black leading-none font-mono">
-              {formatPKR(totalOwedAll)}
-            </div>
+            {isInitialLoading ? (
+              <div className="h-7 w-36 rounded-lg bg-black/10 animate-pulse" />
+            ) : (
+              <div className="text-[26px] font-black leading-none font-mono">
+                {formatPKR(totalOwedAll)}
+              </div>
+            )}
             <p className="text-xs font-semibold opacity-85 mt-2">Remaining unpaid supplier bills</p>
           </div>
         </div>
@@ -244,16 +253,33 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
         </div>
 
         <span className="text-xs text-[#636B76] dark:text-[#8A929C] font-mono">
-          {filtered.length} of {suppliers.length} suppliers
+          {isInitialLoading ? '...' : `${filtered.length} of ${suppliers.length} suppliers`}
         </span>
       </div>
 
       {/* Supplier Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {loading && !initialized ? (
-          <div className="col-span-full py-8 text-center text-xs text-[#636B76]">
-            Loading suppliers...
-          </div>
+        {isInitialLoading ? (
+          Array.from({ length: 3 }).map((_, idx) => (
+            <div
+              key={idx}
+              className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-5 space-y-3 shadow-xs flex flex-col justify-between"
+            >
+              <div className="space-y-2">
+                <div className="h-4 w-40 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                <div className="h-3 w-28 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                <div className="h-3 w-36 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              </div>
+              <div className="bg-[#F8F9FA] dark:bg-[#20242A] p-3 rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] space-y-2">
+                <div className="h-3 w-full rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                <div className="h-3.5 w-3/4 rounded bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <div className="flex-1 h-9 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+                <div className="w-16 h-9 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
+              </div>
+            </div>
+          ))
         ) : filtered.length === 0 ? (
           <div className="col-span-full py-8 text-center text-xs text-[#636B76]">
             No suppliers match your search.

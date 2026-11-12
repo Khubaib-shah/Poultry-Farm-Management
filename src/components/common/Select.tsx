@@ -16,6 +16,7 @@ interface SelectProps {
   searchable?: boolean;
   disabled?: boolean;
   size?: 'sm' | 'md';
+  placement?: 'auto' | 'down' | 'up';
   className?: string;
   ariaLabel?: string;
 }
@@ -28,10 +29,12 @@ export const Select: React.FC<SelectProps> = ({
   searchable = false,
   disabled = false,
   size = 'md',
+  placement = 'auto',
   className = '',
   ariaLabel,
 }) => {
   const [open, setOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -64,25 +67,38 @@ export const Select: React.FC<SelectProps> = ({
 
   const triggerHeight = size === 'sm' ? 'min-h-[38px] px-3.5 py-1.5 text-xs' : 'min-h-[42px] px-4 py-2 text-xs';
 
+  const handleToggle = () => {
+    if (disabled) return;
+    if (!open) {
+      if (placement === 'up') {
+        setOpenUpward(true);
+      } else if (placement === 'down') {
+        setOpenUpward(false);
+      } else if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        setOpenUpward(spaceBelow < 250 && spaceAbove > spaceBelow);
+      }
+      setQuery('');
+    }
+    setOpen((prev) => !prev);
+  };
+
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative ${open ? 'z-50' : ''} ${className}`}>
       <button
         type="button"
         disabled={disabled}
         aria-label={ariaLabel || placeholder}
         aria-expanded={open}
-        onClick={() => {
-          if (!disabled) {
-            setOpen((prev) => !prev);
-            setQuery('');
-          }
-        }}
+        onClick={handleToggle}
         className={`w-full ${triggerHeight} rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F3F5F6]/70 dark:bg-[#1F2328]/80 text-left flex items-center justify-between gap-2 text-[#14161A] dark:text-[#F2F4F5] font-medium hover:border-[#D7DBDF] dark:hover:border-[#373E47] focus:outline-none focus:ring-2 focus:ring-[#D4F56B] transition disabled:opacity-50 cursor-pointer`}
       >
-        <span className="truncate">
+        <span className="truncate min-w-0">
           {selectedOption ? (
-            <span className="flex items-center gap-1.5 truncate">
-              <span className="truncate font-semibold">{selectedOption.label}</span>
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="truncate font-semibold whitespace-nowrap">{selectedOption.label}</span>
               {selectedOption.sublabel && (
                 <span className="text-[11px] text-[#636B76] dark:text-[#8A929C] truncate hidden sm:inline">
                   ({selectedOption.sublabel})
@@ -90,7 +106,7 @@ export const Select: React.FC<SelectProps> = ({
               )}
             </span>
           ) : (
-            <span className="text-[#636B76] dark:text-[#8A929C]">{placeholder}</span>
+            <span className="text-[#636B76] dark:text-[#8A929C] whitespace-nowrap">{placeholder}</span>
           )}
         </span>
         <ChevronDown
@@ -103,11 +119,13 @@ export const Select: React.FC<SelectProps> = ({
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: 4, scale: 0.98 }}
+            initial={{ opacity: 0, y: openUpward ? -4 : 4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
+            exit={{ opacity: 0, y: openUpward ? -4 : 4, scale: 0.98 }}
             transition={{ duration: 0.14 }}
-            className="absolute left-0 right-0 mt-1.5 z-50 rounded-[16px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_10px_30px_rgba(20,22,26,0.12)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.45)] overflow-hidden min-w-[200px]"
+            className={`absolute left-0 right-0 z-50 rounded-[16px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_10px_30px_rgba(20,22,26,0.14)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.45)] overflow-hidden min-w-[200px] ${
+              openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+            }`}
           >
             {searchable && (
               <div className="p-2 border-b border-[#E3E6E8] dark:border-[#2A2F35]">
@@ -125,7 +143,7 @@ export const Select: React.FC<SelectProps> = ({
               </div>
             )}
 
-            <div className="max-h-60 overflow-y-auto p-1.5 space-y-0.5">
+            <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
               {filtered.length === 0 ? (
                 <div className="py-4 text-center text-xs text-[#636B76] dark:text-[#8A929C]">
                   No options found

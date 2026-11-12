@@ -203,10 +203,10 @@ export function DataTable<T>({
         )}
 
         {/* Search + Contextual Filters + Column Picker */}
-        <div className="flex flex-col md:flex-row md:items-center gap-2.5 justify-between">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-2.5 justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1 min-w-0">
             {/* Search Input */}
-            <div className="relative flex-1 min-w-[200px] sm:max-w-xs">
+            <div className="relative flex-1 min-w-[200px] sm:max-w-sm">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#636B76] dark:text-[#8A929C]" />
               <input
                 type="text"
@@ -219,9 +219,12 @@ export function DataTable<T>({
 
             {/* Inline Filters right beside Search */}
             {filters.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid grid-cols-2 sm:flex sm:flex-nowrap sm:items-center gap-2 shrink-0">
                 {filters.map((f) => (
-                  <div key={f.key} className="min-w-[150px] sm:min-w-[170px] flex-1 sm:flex-initial">
+                  <div
+                    key={f.key}
+                    className={`${filters.length === 1 ? 'col-span-2 sm:col-span-1' : ''} sm:min-w-[155px]`}
+                  >
                     <Select
                       size="sm"
                       value={f.value}
@@ -236,17 +239,13 @@ export function DataTable<T>({
             )}
           </div>
 
-          {/* Right side: Mobile Sort + Count + Column Filter */}
-          <div className="flex items-center justify-between sm:justify-end gap-2">
-            <span className="text-[11px] font-semibold text-[#636B76] dark:text-[#8A929C] font-mono">
-              {sortedData.length} {sortedData.length === 1 ? 'row' : 'rows'}
-            </span>
-
+          {/* Right side: Column Filter */}
+          <div className="flex items-center justify-end shrink-0">
             <div className="relative" ref={pickerRef}>
               <button
                 type="button"
                 onClick={() => setColPickerOpen((o) => !o)}
-                className="min-h-[38px] px-3 py-1.5 rounded-[12px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F3F5F6]/70 dark:bg-[#1F2328]/80 hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] text-xs font-semibold text-[#14161A] dark:text-[#F2F4F5] flex items-center gap-1.5 transition cursor-pointer"
+                className="min-h-[38px] px-3 py-1.5 rounded-[12px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F3F5F6]/70 dark:bg-[#1F2328]/80 hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] text-xs font-semibold text-[#14161A] dark:text-[#F2F4F5] flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
               >
                 <Columns3 className="w-3.5 h-3.5" />
                 <span>Columns</span>
@@ -363,14 +362,15 @@ export function DataTable<T>({
           </thead>
           <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
             {loading && sortedData.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={visibleColumns.length}
-                  className="py-10 text-center text-[#636B76] dark:text-[#8A929C]"
-                >
-                  Loading records...
-                </td>
-              </tr>
+              Array.from({ length: 3 }).map((_, idx) => (
+                <tr key={`skeleton-row-${idx}`} className="animate-pulse">
+                  {visibleColumns.map((col) => (
+                    <td key={col.key} className="py-3.5 px-3.5">
+                      <div className="h-3.5 w-3/4 rounded-md bg-[#EDEEEF] dark:bg-[#272C33]" />
+                    </td>
+                  ))}
+                </tr>
+              ))
             ) : sortedData.length === 0 ? (
               <tr>
                 <td
@@ -460,9 +460,15 @@ export function DataTable<T>({
 
         <div className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
           {loading && sortedData.length === 0 ? (
-            <div className="py-10 text-center text-xs text-[#636B76] dark:text-[#8A929C]">
-              Loading records...
-            </div>
+            Array.from({ length: 3 }).map((_, idx) => (
+              <div key={`mobile-skel-${idx}`} className="p-4 space-y-2.5 animate-pulse">
+                <div className="flex justify-between items-center">
+                  <div className="h-4 w-32 rounded-md bg-[#EDEEEF] dark:bg-[#272C33]" />
+                  <div className="h-4 w-16 rounded-full bg-[#EDEEEF] dark:bg-[#272C33]" />
+                </div>
+                <div className="h-12 w-full rounded-[12px] bg-[#F8F9FA] dark:bg-[#20242A]" />
+              </div>
+            ))
           ) : sortedData.length === 0 ? (
             <div className="py-10 px-4 text-center text-xs text-[#636B76] dark:text-[#8A929C]">
               {emptyMessage}
