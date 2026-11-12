@@ -122,7 +122,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
       header: 'Date',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (t) => <span className="font-mono">{formatDate(t.transactionDate)}</span>,
+      render: (t) => <span className="font-normal text-[#7B848F] dark:text-[#8A929C]">{formatDate(t.transactionDate)}</span>,
     },
     {
       key: 'supplierName',
@@ -130,7 +130,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
       sortable: true,
       alwaysVisible: true,
       hideOnMobileDefault: true,
-      render: (t) => <span className="font-bold">{t.supplierName}</span>,
+      render: (t) => <span className="font-normal text-[#636B76] dark:text-[#A3AAB3]">{t.supplierName}</span>,
     },
     {
       key: 'transactionType',
@@ -138,7 +138,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
       sortable: true,
       render: (t) => (
         <span
-          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-normal ${
             t.transactionType === 'PURCHASE_DEBIT'
               ? 'bg-[#F6E7A1]/40 text-amber-900 dark:text-[#F6E7A1]'
               : 'bg-[#92E2B3]/30 text-emerald-800 dark:text-[#92E2B3]'
@@ -153,7 +153,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
       header: 'Details',
       hideOnMobileDefault: true,
       render: (t) => (
-        <span className="text-[#4A515B] dark:text-[#A3AAB3] truncate max-w-[240px] block">
+        <span className="text-[#7B848F] dark:text-[#8A929C] truncate max-w-[240px] block">
           {t.notes || t.referenceType}
         </span>
       ),
@@ -163,7 +163,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
       header: 'Paid Via',
       defaultVisible: false,
       sortable: true,
-      render: (t) => <span className="font-mono text-[11px]">{t.paymentMethod || '-'}</span>,
+      render: (t) => <span className="font-normal text-[11px]">{t.paymentMethod || '-'}</span>,
     },
     {
       key: 'debitAmount',
@@ -172,7 +172,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
       sortable: true,
       sortValue: (t) => Number(t.debitAmount),
       render: (t) => (
-        <span className="font-mono font-bold">
+        <span className="font-normal tabular-nums">
           {Number(t.debitAmount) > 0 ? formatPKR(t.debitAmount) : '-'}
         </span>
       ),
@@ -184,7 +184,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
       sortable: true,
       sortValue: (t) => Number(t.creditAmount),
       render: (t) => (
-        <span className="font-mono font-bold text-[#2FB67C]">
+        <span className="font-normal tabular-nums text-[#2FB67C]">
           {Number(t.creditAmount) > 0 ? formatPKR(t.creditAmount) : '-'}
         </span>
       ),
@@ -196,7 +196,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
       sortable: true,
       alwaysVisible: true,
       sortValue: (t) => Number(t.balanceAfter),
-      render: (t) => <span className="font-mono font-black">{formatPKR(t.balanceAfter)}</span>,
+      render: (t) => <span className="font-normal tabular-nums text-[#636B76] dark:text-[#A3AAB3]">{formatPKR(t.balanceAfter)}</span>,
     },
   ];
 

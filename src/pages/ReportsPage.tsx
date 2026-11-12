@@ -212,7 +212,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       alwaysVisible: true,
       hideOnMobileDefault: true,
       render: (s) => (
-        <span className="font-mono font-bold text-[#14161A] dark:text-white">{s.invoiceNumber}</span>
+        <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">{s.invoiceNumber}</span>
       ),
     },
     {
@@ -220,7 +220,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       header: 'Date',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (s) => <span className="text-[#4A515B] dark:text-[#A3AAB3]">{formatDate(s.saleDate)}</span>,
+      render: (s) => <span className="font-normal text-[#7B848F] dark:text-[#8A929C]">{formatDate(s.saleDate)}</span>,
     },
     {
       key: 'channel',
@@ -230,10 +230,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       sortValue: (s) => (s.saleType === 'OWN_SHOP' ? 'Walk-in Shop' : s.shopName || 'Other Shop'),
       render: (s) => (
         <span
-          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+          className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-normal text-white whitespace-nowrap ${
             s.saleType === 'OWN_SHOP'
-              ? 'bg-[#C9C3F5] text-[#14161A]'
-              : 'bg-[#A9C8FA] text-[#14161A]'
+              ? 'bg-[#6358C8]'
+              : 'bg-[#2B6CB0]'
           }`}
         >
           {s.saleType === 'OWN_SHOP' ? 'Walk-in Shop' : s.shopName || 'Other Shop'}
@@ -245,7 +245,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       header: 'Birds',
       align: 'right',
       sortable: true,
-      render: (s) => <span className="font-mono font-semibold">{formatNumber(s.totalPieces)}</span>,
+      render: (s) => <span className="font-normal tabular-nums">{formatNumber(s.totalPieces)}</span>,
     },
     {
       key: 'sellingPricePerPiece',
@@ -254,7 +254,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       sortable: true,
       defaultVisible: false,
       sortValue: (s) => Number(s.sellingPricePerPiece),
-      render: (s) => <span className="font-mono">{formatPKR(s.sellingPricePerPiece)}</span>,
+      render: (s) => <span className="font-normal tabular-nums">{formatPKR(s.sellingPricePerPiece)}</span>,
     },
     {
       key: 'totalCost',
@@ -262,7 +262,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       align: 'right',
       sortable: true,
       sortValue: (s) => Number(s.totalCost),
-      render: (s) => <span className="font-mono text-[#636B76] dark:text-[#8A929C]">{formatPKR(s.totalCost)}</span>,
+      render: (s) => <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">{formatPKR(s.totalCost)}</span>,
     },
     {
       key: 'totalAmount',
@@ -272,7 +272,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       alwaysVisible: true,
       sortValue: (s) => Number(s.totalAmount),
       render: (s) => (
-        <span className="font-mono font-bold text-[#14161A] dark:text-white">{formatPKR(s.totalAmount)}</span>
+        <span className="font-normal tabular-nums text-[#636B76] dark:text-[#A3AAB3]">{formatPKR(s.totalAmount)}</span>
       ),
     },
     {
@@ -284,7 +284,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       sortValue: (s) => Number(s.totalProfit),
       render: (s) => (
         <span
-          className={`font-mono font-bold ${
+          className={`font-normal tabular-nums ${
             Number(s.totalProfit) >= 0 ? 'text-[#2FB67C]' : 'text-[#D95C5C] dark:text-[#FF8585]'
           }`}
         >
@@ -301,7 +301,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       sortable: true,
       alwaysVisible: true,
       hideOnMobileDefault: true,
-      render: (p) => <span className="font-mono font-bold">{p.loadNumber}</span>,
+      render: (p) => <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">{p.loadNumber}</span>,
     },
     {
       key: 'supplierName',
@@ -310,9 +310,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       hideOnMobileDefault: true,
       render: (p) => (
         <div>
-          <div className="font-semibold text-[#14161A] dark:text-white">{p.supplierName}</div>
+          <div className="font-normal text-[#636B76] dark:text-[#A3AAB3]">{p.supplierName}</div>
           {p.vehicleNumber && (
-            <div className="text-[10px] text-[#636B76] font-mono">{p.vehicleNumber}</div>
+            <div className="text-[10px] text-[#7B848F] dark:text-[#8A929C]">{p.vehicleNumber}</div>
           )}
         </div>
       ),
@@ -322,7 +322,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       header: 'Date',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (p) => formatDate(p.purchaseDate),
+      render: (p) => <span className="text-[#7B848F] dark:text-[#8A929C]">{formatDate(p.purchaseDate)}</span>,
     },
     {
       key: 'totalWeightKg',
@@ -330,7 +330,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       align: 'right',
       sortable: true,
       sortValue: (p) => Number(p.totalWeightKg),
-      render: (p) => <span className="font-mono">{formatNumber(p.totalWeightKg)} KG</span>,
+      render: (p) => <span className="font-normal tabular-nums">{formatNumber(p.totalWeightKg)} KG</span>,
     },
     {
       key: 'purchaseAmount',
@@ -339,7 +339,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       sortable: true,
       defaultVisible: false,
       sortValue: (p) => Number(p.purchaseAmount),
-      render: (p) => <span className="font-mono">{formatPKR(p.purchaseAmount)}</span>,
+      render: (p) => <span className="font-normal tabular-nums">{formatPKR(p.purchaseAmount)}</span>,
     },
     {
       key: 'totalExpenses',
@@ -347,7 +347,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       align: 'right',
       sortable: true,
       sortValue: (p) => Number(p.totalExpenses || 0),
-      render: (p) => <span className="font-mono text-[#F5B544]">{formatPKR(p.totalExpenses || 0)}</span>,
+      render: (p) => <span className="font-normal tabular-nums text-[#F5B544]">{formatPKR(p.totalExpenses || 0)}</span>,
     },
     {
       key: 'totalLandedCost',
@@ -358,7 +358,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       hideOnMobileDefault: true,
       sortValue: (p) => Number(p.totalLandedCost || p.purchaseAmount),
       render: (p) => (
-        <span className="font-mono font-bold text-[#14161A] dark:text-[#D4F56B]">
+        <span className="font-normal tabular-nums text-[#636B76] dark:text-[#A3AAB3]">
           {formatPKR(p.totalLandedCost || p.purchaseAmount)}
         </span>
       ),
@@ -370,7 +370,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       sortable: true,
       render: (p) => (
         <span
-          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+          className={`px-2 py-0.5 rounded-full text-[10px] font-normal ${
             p.status === 'RECEIVED'
               ? 'bg-[#92E2B3]/30 text-emerald-800 dark:text-[#92E2B3]'
               : 'bg-[#F6E7A1]/40 text-amber-900 dark:text-[#F6E7A1]'
@@ -388,7 +388,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       header: 'Date',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (e) => <span className="font-mono">{formatDate(e.expenseDate)}</span>,
+      render: (e) => <span className="font-normal text-[#7B848F] dark:text-[#8A929C]">{formatDate(e.expenseDate)}</span>,
     },
     {
       key: 'category',
@@ -397,7 +397,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       alwaysVisible: true,
       hideOnMobileDefault: true,
       render: (e) => (
-        <span className="px-2 py-0.5 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] font-bold text-[11px]">
+        <span className="px-2 py-0.5 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] font-normal text-[11px] text-[#636B76] dark:text-[#A3AAB3]">
           {e.category}
         </span>
       ),
@@ -407,14 +407,14 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       header: 'Paid Via',
       sortable: true,
       defaultVisible: false,
-      render: (e) => <span className="font-mono text-[11px]">{e.paymentMethod}</span>,
+      render: (e) => <span className="font-normal text-[11px]">{e.paymentMethod}</span>,
     },
     {
       key: 'description',
       header: 'Details',
       hideOnMobileDefault: true,
       render: (e) => (
-        <span className="text-[#4A515B] dark:text-[#A3AAB3]">{e.description || '-'}</span>
+        <span className="text-[#7B848F] dark:text-[#8A929C]">{e.description || '-'}</span>
       ),
     },
     {
@@ -425,7 +425,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       alwaysVisible: true,
       hideOnMobileDefault: true,
       sortValue: (e) => Number(e.amount),
-      render: (e) => <span className="font-mono font-bold">{formatPKR(e.amount)}</span>,
+      render: (e) => (
+        <span className="font-normal tabular-nums text-[#636B76] dark:text-[#A3AAB3]">
+          {formatPKR(e.amount)}
+        </span>
+      ),
     },
   ];
 

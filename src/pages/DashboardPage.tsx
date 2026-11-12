@@ -608,16 +608,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-[#E3E6E8] dark:border-[#2A2F35] text-[#636B76] dark:text-[#8A929C] text-[11px] font-bold uppercase tracking-wider bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50">
-                    <th className="py-3 px-4">Bill #</th>
-                    <th className="py-3 px-4">Sold To</th>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4 text-right">Birds</th>
-                    <th className="py-3 px-4 text-right">Cash</th>
-                    <th className="py-3 px-4 text-right">Profit</th>
+                  <tr className="border-b border-[#E3E6E8] dark:border-[#2A2F35] text-[#7B848F] dark:text-[#8A929C] text-[11px] font-medium uppercase tracking-wider bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50">
+                    <th className="py-3 px-4 font-medium">Bill #</th>
+                    <th className="py-3 px-4 font-medium">Sold To</th>
+                    <th className="py-3 px-4 font-medium">Date</th>
+                    <th className="py-3 px-4 text-right font-medium">Birds</th>
+                    <th className="py-3 px-4 text-right font-medium">Cash</th>
+                    <th className="py-3 px-4 text-right font-medium">Profit</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
+                <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] font-normal text-[#636B76] dark:text-[#A3AAB3] tabular-nums">
                   {isInitialLoading ? (
                     Array.from({ length: 4 }).map((_, idx) => (
                       <tr key={idx}>
@@ -643,7 +643,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     ))
                   ) : recent.sales.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-[#636B76]">
+                      <td colSpan={6} className="py-6 text-center text-[#7B848F]">
                         No sales recorded yet.
                       </td>
                     </tr>
@@ -653,31 +653,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         key={sale.id}
                         className="hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] transition-colors"
                       >
-                        <td className="py-3 px-4 font-mono font-bold text-[#14161A] dark:text-white">
+                        <td className="py-3 px-4 font-normal text-[#7B848F] dark:text-[#8A929C]">
                           {sale.invoiceNumber}
                         </td>
                         <td className="py-3 px-4">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-normal text-white whitespace-nowrap ${
                               sale.saleType === 'OWN_SHOP'
-                                ? 'bg-[#C9C3F5] text-[#14161A]'
-                                : 'bg-[#A9C8FA] text-[#14161A]'
+                                ? 'bg-[#6358C8]'
+                                : 'bg-[#2B6CB0]'
                             }`}
                           >
                             {sale.saleType === 'OWN_SHOP' ? 'Walk-in Shop' : sale.shopName || 'Other Shop'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-[#4A515B] dark:text-[#A3AAB3]">
+                        <td className="py-3 px-4 text-[#7B848F] dark:text-[#8A929C]">
                           {formatDate(sale.saleDate)}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-semibold">
+                        <td className="py-3 px-4 text-right font-normal text-[#636B76] dark:text-[#A3AAB3]">
                           {sale.totalPieces} birds
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-[#14161A] dark:text-white">
+                        <td className="py-3 px-4 text-right font-normal text-[#636B76] dark:text-[#A3AAB3]">
                           {formatPKR(sale.totalAmount)}
                         </td>
                         <td
-                          className={`py-3 px-4 text-right font-mono font-bold ${
+                          className={`py-3 px-4 text-right font-normal ${
                             Number(sale.totalProfit) >= 0
                               ? 'text-[#2FB67C]'
                               : 'text-[#D95C5C] dark:text-[#FF8585]'
@@ -713,30 +713,30 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 recent.sales.slice(0, 5).map((sale) => (
                   <div key={sale.id} className="p-4 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs text-[#14161A] dark:text-white">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-normal tabular-nums text-xs text-[#7B848F] dark:text-[#8A929C]">
                           {sale.invoiceNumber}
                         </span>
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-normal text-white whitespace-nowrap ${
                             sale.saleType === 'OWN_SHOP'
-                              ? 'bg-[#C9C3F5] text-[#14161A]'
-                              : 'bg-[#A9C8FA] text-[#14161A]'
+                              ? 'bg-[#6358C8]'
+                              : 'bg-[#2B6CB0]'
                           }`}
                         >
                           {sale.saleType === 'OWN_SHOP' ? 'Walk-in Shop' : sale.shopName || 'Other Shop'}
                         </span>
                       </div>
-                      <div className="text-[11px] text-[#636B76] dark:text-[#8A929C] mt-1">
+                      <div className="text-[11px] text-[#7B848F] dark:text-[#8A929C] mt-1">
                         {formatDate(sale.saleDate)} · {sale.totalPieces} birds
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-mono font-bold text-xs text-[#14161A] dark:text-white">
+                    <div className="text-right shrink-0 tabular-nums">
+                      <div className="font-normal text-xs text-[#636B76] dark:text-[#A3AAB3]">
                         {formatPKR(sale.totalAmount)}
                       </div>
                       <div
-                        className={`font-mono font-bold text-[11px] ${
+                        className={`font-normal text-[11px] ${
                           Number(sale.totalProfit) >= 0
                             ? 'text-[#2FB67C]'
                             : 'text-[#D95C5C] dark:text-[#FF8585]'
@@ -838,12 +838,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     </div>
                   ))
                 : recent.purchases.slice(0, 3).map((load) => (
-                    <div key={load.id} className="py-2.5 first:pt-0 last:pb-0 space-y-0.5">
-                      <div className="flex items-center justify-between font-mono font-bold text-[#14161A] dark:text-white">
+                    <div key={load.id} className="py-2.5 first:pt-0 last:pb-0 space-y-0.5 tabular-nums">
+                      <div className="flex items-center justify-between font-normal text-[#7B848F] dark:text-[#8A929C]">
                         <span>{load.loadNumber}</span>
-                        <span>{formatPKR(load.purchaseAmount)}</span>
+                        <span className="text-[#636B76] dark:text-[#A3AAB3]">{formatPKR(load.purchaseAmount)}</span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px] text-[#4A515B] dark:text-[#A3AAB3]">
+                      <div className="flex items-center justify-between text-[11px] text-[#7B848F] dark:text-[#8A929C]">
                         <span className="truncate max-w-[130px]">{load.supplierName}</span>
                         <span>{formatNumber(load.totalWeightKg)} KG</span>
                       </div>

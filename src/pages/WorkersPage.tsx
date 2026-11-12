@@ -139,7 +139,7 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
       header: 'Date',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (p) => <span className="font-mono">{formatDate(p.paymentDate)}</span>,
+      render: (p) => <span className="font-normal text-[#7B848F] dark:text-[#8A929C]">{formatDate(p.paymentDate)}</span>,
     },
     {
       key: 'workerName',
@@ -147,13 +147,13 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
       sortable: true,
       alwaysVisible: true,
       hideOnMobileDefault: true,
-      render: (p) => <span className="font-bold">{p.workerName || `Staff #${p.workerId}`}</span>,
+      render: (p) => <span className="font-normal text-[#636B76] dark:text-[#A3AAB3]">{p.workerName || `Staff #${p.workerId}`}</span>,
     },
     {
       key: 'description',
       header: 'Reason / Note',
       render: (p) => (
-        <span className="text-[#4A515B] dark:text-[#A3AAB3]">{p.description || '-'}</span>
+        <span className="text-[#7B848F] dark:text-[#8A929C]">{p.description || '-'}</span>
       ),
     },
     {
@@ -161,7 +161,7 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
       header: 'Paid Via',
       defaultVisible: false,
       sortable: true,
-      render: (p) => <span className="font-mono text-[11px]">{p.paymentMethod}</span>,
+      render: (p) => <span className="font-normal text-[11px]">{p.paymentMethod}</span>,
     },
     {
       key: 'amount',
@@ -171,7 +171,7 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
       alwaysVisible: true,
       hideOnMobileDefault: true,
       sortValue: (p) => Number(p.amount),
-      render: (p) => <span className="font-mono font-bold">{formatPKR(p.amount)}</span>,
+      render: (p) => <span className="font-normal tabular-nums">{formatPKR(p.amount)}</span>,
     },
   ];
 

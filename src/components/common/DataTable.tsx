@@ -319,7 +319,7 @@ export function DataTable<T>({
       <div className="hidden md:block overflow-x-auto rounded-b-[20px]">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] text-[#4A515B] dark:text-[#A3AAB3] font-bold uppercase tracking-wider text-[11px]">
+            <tr className="bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] text-[#7B848F] dark:text-[#8A929C] font-medium uppercase tracking-wider text-[11px]">
               {visibleColumns.map((col) => {
                 const isSorted = sortKey === col.key;
                 const alignClass =
@@ -333,9 +333,9 @@ export function DataTable<T>({
                   <th
                     key={col.key}
                     onClick={() => handleSort(col)}
-                    className={`py-3 px-3.5 whitespace-nowrap select-none ${
+                    className={`py-3 px-3.5 font-medium whitespace-nowrap select-none ${
                       col.sortable
-                        ? 'cursor-pointer hover:text-[#14161A] dark:hover:text-white transition-colors'
+                        ? 'cursor-pointer hover:text-[#4A515B] dark:hover:text-[#F2F4F5] transition-colors'
                         : ''
                     }`}
                   >
@@ -360,7 +360,7 @@ export function DataTable<T>({
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
+          <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] font-normal text-[#636B76] dark:text-[#A3AAB3] tabular-nums">
             {loading && sortedData.length === 0 ? (
               Array.from({ length: 3 }).map((_, idx) => (
                 <tr key={`skeleton-row-${idx}`} className="animate-pulse">

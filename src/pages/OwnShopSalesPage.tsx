@@ -111,14 +111,14 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
       sortable: true,
       alwaysVisible: true,
       hideOnMobileDefault: true,
-      render: (s) => <span className="font-mono font-bold">{s.invoiceNumber}</span>,
+      render: (s) => <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">{s.invoiceNumber}</span>,
     },
     {
       key: 'saleDate',
       header: 'Date',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (s) => <span className="text-[#4A515B] dark:text-[#A3AAB3]">{formatDate(s.saleDate)}</span>,
+      render: (s) => <span className="font-normal text-[#7B848F] dark:text-[#8A929C]">{formatDate(s.saleDate)}</span>,
     },
     {
       key: 'totalPieces',
@@ -126,7 +126,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
       align: 'right',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (s) => <span className="font-mono font-semibold">{formatNumber(s.totalPieces)} birds</span>,
+      render: (s) => <span className="font-normal tabular-nums">{formatNumber(s.totalPieces)} birds</span>,
     },
     {
       key: 'sellingPricePerPiece',
@@ -135,7 +135,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
       defaultVisible: false,
       sortable: true,
       sortValue: (s) => Number(s.sellingPricePerPiece),
-      render: (s) => <span className="font-mono">{formatPKR(s.sellingPricePerPiece)}</span>,
+      render: (s) => <span className="font-normal tabular-nums">{formatPKR(s.sellingPricePerPiece)}</span>,
     },
     {
       key: 'costPerPiece',
@@ -144,7 +144,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
       defaultVisible: false,
       sortable: true,
       sortValue: (s) => Number(s.costPerPiece),
-      render: (s) => <span className="font-mono text-[#636B76]">{formatPKR(s.costPerPiece)}</span>,
+      render: (s) => <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">{formatPKR(s.costPerPiece)}</span>,
     },
     {
       key: 'profitPerPiece',
@@ -155,7 +155,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
       sortValue: (s) => Number(s.profitPerPiece),
       render: (s) => (
         <span
-          className={`font-mono font-bold ${
+          className={`font-normal tabular-nums ${
             Number(s.profitPerPiece) >= 0 ? 'text-[#2FB67C]' : 'text-[#D95C5C] dark:text-[#FF8585]'
           }`}
         >
@@ -170,7 +170,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
       sortable: true,
       alwaysVisible: true,
       sortValue: (s) => Number(s.totalAmount),
-      render: (s) => <span className="font-mono font-bold">{formatPKR(s.totalAmount)}</span>,
+      render: (s) => <span className="font-normal tabular-nums">{formatPKR(s.totalAmount)}</span>,
     },
     {
       key: 'totalProfit',
@@ -181,7 +181,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
       sortValue: (s) => Number(s.totalProfit),
       render: (s) => (
         <span
-          className={`font-mono font-black ${
+          className={`font-normal tabular-nums ${
             Number(s.totalProfit) >= 0 ? 'text-[#2FB67C]' : 'text-[#D95C5C] dark:text-[#FF8585]'
           }`}
         >

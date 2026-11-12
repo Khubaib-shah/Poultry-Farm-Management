@@ -125,7 +125,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       sortable: true,
       alwaysVisible: true,
       hideOnMobileDefault: true,
-      render: (b) => <span className="font-mono font-bold">{b.batchNumber}</span>,
+      render: (b) => <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">{b.batchNumber}</span>,
     },
     {
       key: 'receivingDate',
@@ -133,7 +133,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       sortable: true,
       hideOnMobileDefault: true,
       render: (b) => (
-        <span className="text-[#4A515B] dark:text-[#A3AAB3]">{formatDate(b.receivingDate)}</span>
+        <span className="font-normal text-[#7B848F] dark:text-[#8A929C]">{formatDate(b.receivingDate)}</span>
       ),
     },
     {
@@ -143,8 +143,8 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       hideOnMobileDefault: true,
       render: (b) => (
         <div>
-          <div className="font-semibold">{b.supplierName}</div>
-          <div className="text-[10px] text-[#636B76] font-mono">{b.loadNumber}</div>
+          <div className="font-normal text-[#636B76] dark:text-[#A3AAB3]">{b.supplierName}</div>
+          <div className="text-[10px] text-[#7B848F] dark:text-[#8A929C]">{b.loadNumber}</div>
         </div>
       ),
     },
@@ -156,7 +156,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       sortable: true,
       sortValue: (b) => b.receivedPieces,
       render: (b) => (
-        <span className="font-mono">
+        <span className="font-normal tabular-nums">
           {b.receivedPieces} / <span className="text-rose-500">{b.deadPieces}</span> /{' '}
           <span className="text-amber-500">{b.damagedPieces}</span>
         </span>
@@ -168,14 +168,14 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       align: 'right',
       defaultVisible: false,
       sortable: true,
-      render: (b) => <span className="font-mono">{formatNumber(b.originalSaleablePieces)}</span>,
+      render: (b) => <span className="font-normal tabular-nums">{formatNumber(b.originalSaleablePieces)}</span>,
     },
     {
       key: 'soldPieces',
       header: 'Sold',
       align: 'right',
       sortable: true,
-      render: (b) => <span className="font-mono">{formatNumber(b.soldPieces)}</span>,
+      render: (b) => <span className="font-normal tabular-nums">{formatNumber(b.soldPieces)}</span>,
     },
     {
       key: 'remainingPieces',
@@ -185,7 +185,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       alwaysVisible: true,
       hideOnMobileDefault: true,
       render: (b) => (
-        <span className="font-mono font-black text-[#14161A] dark:text-white">
+        <span className="font-normal tabular-nums text-[#636B76] dark:text-[#A3AAB3]">
           {formatNumber(b.remainingPieces)}
         </span>
       ),
@@ -197,7 +197,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       sortable: true,
       sortValue: (b) => Number(b.costPerPiece),
       render: (b) => (
-        <span className="font-mono font-bold text-[#2FB67C]">{formatPKR(b.costPerPiece)}</span>
+        <span className="font-normal tabular-nums text-[#2FB67C]">{formatPKR(b.costPerPiece)}</span>
       ),
     },
     {
@@ -208,9 +208,9 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       sortValue: (b) => (b.isClosed ? 0 : b.remainingPieces),
       render: (b) => (
         <span
-          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-normal ${
             b.isClosed
-              ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#636B76]'
+              ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#7B848F]'
               : b.remainingPieces <= lowThreshold
               ? 'bg-[#F6E7A1]/40 text-amber-900 dark:text-[#F6E7A1]'
               : 'bg-[#92E2B3]/25 text-emerald-800 dark:text-[#92E2B3]'
@@ -231,7 +231,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
             setSelectedBatchId(String(b.id));
             setActiveTab('calculator');
           }}
-          className="px-3 py-1.5 text-[11px] font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer"
+          className="px-3 py-1.5 text-[11px] font-medium rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer"
         >
           Check Profit
         </button>
@@ -245,7 +245,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       header: 'Date & Time',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (m) => <span className="font-mono text-[11px]">{formatDateTime(m.createdAt)}</span>,
+      render: (m) => <span className="font-normal text-[11px] text-[#7B848F] dark:text-[#8A929C]">{formatDateTime(m.createdAt)}</span>,
     },
     {
       key: 'batchNumber',
@@ -253,7 +253,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       sortable: true,
       alwaysVisible: true,
       hideOnMobileDefault: true,
-      render: (m) => <span className="font-mono font-bold">{m.batchNumber}</span>,
+      render: (m) => <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">{m.batchNumber}</span>,
     },
     {
       key: 'movementType',
@@ -261,7 +261,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       sortable: true,
       render: (m) => (
         <span
-          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+          className={`px-2 py-0.5 rounded-full text-[10px] font-normal ${
             m.movementType === 'STOCK_IN'
               ? 'bg-[#92E2B3]/30 text-emerald-800 dark:text-[#92E2B3]'
               : m.movementType === 'SALE_OUT'
@@ -289,7 +289,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       alwaysVisible: true,
       hideOnMobileDefault: true,
       render: (m) => (
-        <span className={`font-mono font-bold ${m.quantity > 0 ? 'text-[#2FB67C]' : 'text-rose-500'}`}>
+        <span className={`font-normal tabular-nums ${m.quantity > 0 ? 'text-[#2FB67C]' : 'text-rose-500'}`}>
           {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
         </span>
       ),
@@ -299,7 +299,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       header: 'Left in Lot',
       align: 'right',
       sortable: true,
-      render: (m) => <span className="font-mono font-semibold">{m.balanceAfter} birds</span>,
+      render: (m) => <span className="font-normal tabular-nums">{m.balanceAfter} birds</span>,
     },
     {
       key: 'unitCost',
@@ -308,7 +308,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
       defaultVisible: false,
       sortable: true,
       sortValue: (m) => Number(m.unitCost),
-      render: (m) => <span className="font-mono">{formatPKR(m.unitCost)}</span>,
+      render: (m) => <span className="font-normal tabular-nums">{formatPKR(m.unitCost)}</span>,
     },
     {
       key: 'notes',

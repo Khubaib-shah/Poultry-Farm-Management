@@ -225,7 +225,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       alwaysVisible: true,
       hideOnMobileDefault: true,
       render: (load) => (
-        <span className="font-bold text-[#14161A] dark:text-[#F2F4F5] font-mono">
+        <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">
           {load.loadNumber}
         </span>
       ),
@@ -238,9 +238,9 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       hideOnMobileDefault: true,
       render: (load) => (
         <div>
-          <div className="font-semibold text-[#14161A] dark:text-[#F2F4F5]">{load.supplierName}</div>
+          <div className="font-normal text-[#636B76] dark:text-[#A3AAB3]">{load.supplierName}</div>
           {load.vehicleNumber && (
-            <div className="text-[10px] text-[#636B76] dark:text-[#8A929C] font-mono">
+            <div className="text-[10px] text-[#7B848F] dark:text-[#8A929C]">
               {load.vehicleNumber} {load.driverName ? `(${load.driverName})` : ''}
             </div>
           )}
@@ -253,7 +253,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       sortable: true,
       hideOnMobileDefault: true,
       render: (load) => (
-        <span className="text-[#4A515B] dark:text-[#A3AAB3]">{formatDate(load.purchaseDate)}</span>
+        <span className="font-normal text-[#7B848F] dark:text-[#8A929C]">{formatDate(load.purchaseDate)}</span>
       ),
     },
     {
@@ -263,7 +263,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       sortable: true,
       sortValue: (l) => Number(l.totalWeightKg),
       render: (load) => (
-        <span className="font-mono text-[#14161A] dark:text-[#F2F4F5]">
+        <span className="font-normal tabular-nums text-[#636B76] dark:text-[#A3AAB3]">
           {formatNumber(load.totalWeightKg)} KG
         </span>
       ),
@@ -276,7 +276,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       defaultVisible: false,
       sortValue: (l) => Number(l.purchaseRatePerKg),
       render: (load) => (
-        <span className="font-mono text-[#4A515B] dark:text-[#A3AAB3]">
+        <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">
           {formatPKR(load.purchaseRatePerKg)}
         </span>
       ),
@@ -288,7 +288,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       sortable: true,
       defaultVisible: false,
       sortValue: (l) => Number(l.purchaseAmount),
-      render: (load) => <span className="font-mono font-bold">{formatPKR(load.purchaseAmount)}</span>,
+      render: (load) => <span className="font-normal tabular-nums">{formatPKR(load.purchaseAmount)}</span>,
     },
     {
       key: 'totalExpenses',
@@ -298,7 +298,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       defaultVisible: false,
       sortValue: (l) => Number(l.totalExpenses || 0),
       render: (load) => (
-        <span className="font-mono text-[#4A515B] dark:text-[#A3AAB3]">
+        <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">
           {formatPKR(load.totalExpenses || 0)}
         </span>
       ),
@@ -310,7 +310,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       sortable: true,
       sortValue: (l) => Number(l.totalLandedCost || l.purchaseAmount),
       render: (load) => (
-        <span className="font-mono font-black text-[#14161A] dark:text-[#D4F56B]">
+        <span className="font-normal tabular-nums text-[#636B76] dark:text-[#A3AAB3]">
           {formatPKR(load.totalLandedCost || load.purchaseAmount)}
         </span>
       ),
@@ -323,7 +323,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       hideOnMobileDefault: true,
       render: (load) => (
         <span
-          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider ${
+          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-normal tracking-wider ${
             load.status === 'RECEIVED'
               ? 'bg-[#92E2B3]/25 text-emerald-800 dark:text-[#92E2B3] border border-[#92E2B3]/40'
               : 'bg-[#F6E7A1]/35 text-amber-900 dark:text-[#F6E7A1] border border-[#F6E7A1]/50'

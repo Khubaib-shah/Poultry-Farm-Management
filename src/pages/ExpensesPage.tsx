@@ -120,7 +120,7 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
       header: 'Date',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (e) => <span className="font-mono">{formatDate(e.expenseDate)}</span>,
+      render: (e) => <span className="font-normal text-[#7B848F] dark:text-[#8A929C]">{formatDate(e.expenseDate)}</span>,
     },
     {
       key: 'category',
@@ -129,7 +129,7 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
       alwaysVisible: true,
       hideOnMobileDefault: true,
       render: (e) => (
-        <span className="px-2.5 py-0.5 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] text-[11px] font-bold">
+        <span className="px-2.5 py-0.5 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] text-[11px] font-normal text-[#636B76] dark:text-[#A3AAB3]">
           {e.category}
         </span>
       ),
@@ -138,7 +138,7 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
       key: 'description',
       header: 'Note / Details',
       render: (e) => (
-        <span className="text-[#4A515B] dark:text-[#A3AAB3] truncate max-w-[260px] block">
+        <span className="text-[#7B848F] dark:text-[#8A929C] truncate max-w-[260px] block">
           {e.description || '-'}
         </span>
       ),
@@ -148,7 +148,7 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
       header: 'Paid Via',
       defaultVisible: false,
       sortable: true,
-      render: (e) => <span className="font-mono text-[11px]">{e.paymentMethod}</span>,
+      render: (e) => <span className="font-normal text-[11px]">{e.paymentMethod}</span>,
     },
     {
       key: 'amount',
@@ -158,7 +158,7 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
       alwaysVisible: true,
       hideOnMobileDefault: true,
       sortValue: (e) => Number(e.amount),
-      render: (e) => <span className="font-mono font-bold">{formatPKR(e.amount)}</span>,
+      render: (e) => <span className="font-normal tabular-nums">{formatPKR(e.amount)}</span>,
     },
     {
       key: 'actions',

@@ -156,7 +156,7 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
       sortable: true,
       alwaysVisible: true,
       hideOnMobileDefault: true,
-      render: (s) => <span className="font-mono font-bold">{s.invoiceNumber}</span>,
+      render: (s) => <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">{s.invoiceNumber}</span>,
     },
     {
       key: 'shopName',
@@ -164,21 +164,21 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
       sortable: true,
       alwaysVisible: true,
       hideOnMobileDefault: true,
-      render: (s) => <span className="font-semibold">{s.shopName || 'Retail Shop'}</span>,
+      render: (s) => <span className="font-normal text-[#636B76] dark:text-[#A3AAB3]">{s.shopName || 'Retail Shop'}</span>,
     },
     {
       key: 'saleDate',
       header: 'Delivery Date',
       sortable: true,
       hideOnMobileDefault: true,
-      render: (s) => <span className="text-[#4A515B] dark:text-[#A3AAB3]">{formatDate(s.saleDate)}</span>,
+      render: (s) => <span className="font-normal text-[#7B848F] dark:text-[#8A929C]">{formatDate(s.saleDate)}</span>,
     },
     {
       key: 'totalPieces',
       header: 'Birds',
       align: 'right',
       sortable: true,
-      render: (s) => <span className="font-mono font-semibold">{formatNumber(s.totalPieces)} birds</span>,
+      render: (s) => <span className="font-normal tabular-nums">{formatNumber(s.totalPieces)} birds</span>,
     },
     {
       key: 'sellingPricePerPiece',
@@ -187,7 +187,7 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
       defaultVisible: false,
       sortable: true,
       sortValue: (s) => Number(s.sellingPricePerPiece),
-      render: (s) => <span className="font-mono">{formatPKR(s.sellingPricePerPiece)}</span>,
+      render: (s) => <span className="font-normal tabular-nums">{formatPKR(s.sellingPricePerPiece)}</span>,
     },
     {
       key: 'totalCost',
@@ -196,7 +196,7 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
       defaultVisible: false,
       sortable: true,
       sortValue: (s) => Number(s.totalCost),
-      render: (s) => <span className="font-mono text-[#636B76]">{formatPKR(s.totalCost)}</span>,
+      render: (s) => <span className="font-normal tabular-nums text-[#7B848F] dark:text-[#8A929C]">{formatPKR(s.totalCost)}</span>,
     },
     {
       key: 'totalAmount',
@@ -205,7 +205,7 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
       sortable: true,
       alwaysVisible: true,
       sortValue: (s) => Number(s.totalAmount),
-      render: (s) => <span className="font-mono font-bold">{formatPKR(s.totalAmount)}</span>,
+      render: (s) => <span className="font-normal tabular-nums">{formatPKR(s.totalAmount)}</span>,
     },
     {
       key: 'totalProfit',
@@ -216,7 +216,7 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
       sortValue: (s) => Number(s.totalProfit),
       render: (s) => (
         <span
-          className={`font-mono font-bold ${
+          className={`font-normal tabular-nums ${
             Number(s.totalProfit) >= 0 ? 'text-[#2FB67C]' : 'text-[#D95C5C] dark:text-[#FF8585]'
           }`}
         >
