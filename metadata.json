@@ -1,0 +1,6 @@
+{
+  "name": "Poultry Farm Management System",
+  "description": "Enterprise-grade poultry business management system for purchases, stock receiving, FIFO inventory, shop sales, dealer ledger, expenses, and profit reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
