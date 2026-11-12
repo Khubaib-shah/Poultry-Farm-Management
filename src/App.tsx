@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ThemeProvider } from './context/ThemeContext.tsx';
 import { FloatingIslandShell, NavItemKey } from './components/shell/FloatingIslandShell.tsx';
-import { ToastContainer, ToastMessage } from './components/common/Toast.tsx';
+import { ToastContainer } from './components/common/Toast.tsx';
+import { ErrorBoundary } from './components/common/ErrorBoundary.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { PurchasesPage } from './pages/PurchasesPage.tsx';
 import { SuppliersPage } from './pages/SuppliersPage.tsx';
@@ -13,44 +14,41 @@ import { WorkersPage } from './pages/WorkersPage.tsx';
 import { ExpensesPage } from './pages/ExpensesPage.tsx';
 import { ReportsPage } from './pages/ReportsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
-import { api } from './services/api.ts';
+import { useAppStore } from './store/useAppStore.ts';
 
-export default function App() {
+function AppShellContent() {
   const [currentTab, setCurrentTab] = useState<NavItemKey>('dashboard');
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [availableStock, setAvailableStock] = useState<number>(0);
-
-  // Cross-page parameters
-  const [selectedSupplierForLedger, setSelectedSupplierForLedger] = useState<number | undefined>(undefined);
+  const [selectedSupplierForLedger, setSelectedSupplierForLedger] = useState<number | undefined>(
+    undefined
+  );
   const [initialOpenNewLoad, setInitialOpenNewLoad] = useState(false);
 
-  const addToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
-    const id = Date.now().toString() + Math.random().toString();
-    setToasts((prev) => [...prev, { id, text, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4500);
-  };
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const refreshStockCount = async () => {
-    try {
-      const batches = await api.getBatches();
-      const total = batches
-        .filter((b) => !b.isClosed)
-        .reduce((sum, b) => sum + b.remainingPieces, 0);
-      setAvailableStock(total);
-    } catch {
-      // fallback
-    }
-  };
+  const bootstrap = useAppStore((s) => s.bootstrap);
+  const batches = useAppStore((s) => s.batches);
+  const purchases = useAppStore((s) => s.purchases);
+  const settings = useAppStore((s) => s.settings);
+  const toasts = useAppStore((s) => s.toasts);
+  const dismissToast = useAppStore((s) => s.dismissToast);
+  const addToast = useAppStore((s) => s.addToast);
+  const globalError = useAppStore((s) => s.globalError);
+  const clearGlobalError = useAppStore((s) => s.clearGlobalError);
 
   useEffect(() => {
-    refreshStockCount();
-  }, [currentTab]);
+    void bootstrap();
+  }, [bootstrap]);
+
+  const availableStock = useMemo(
+    () =>
+      batches
+        .filter((b) => !b.isClosed)
+        .reduce((sum, b) => sum + Number(b.remainingPieces || 0), 0),
+    [batches]
+  );
+
+  const pendingLoadsCount = useMemo(
+    () => purchases.filter((p) => p.status !== 'RECEIVED').length,
+    [purchases]
+  );
 
   const handleQuickAction = (action: 'new-sale' | 'new-load' | 'calculator') => {
     if (action === 'new-sale') {
@@ -64,83 +62,77 @@ export default function App() {
   };
 
   return (
+    <FloatingIslandShell
+      currentTab={currentTab}
+      onSelectTab={(tab) => {
+        setCurrentTab(tab);
+        setInitialOpenNewLoad(false);
+      }}
+      availableStock={availableStock}
+      pendingLoadsCount={pendingLoadsCount}
+      businessName={settings.businessName}
+      globalError={globalError}
+      onDismissError={clearGlobalError}
+      onRetrySync={() => void bootstrap({ force: true })}
+      onQuickAction={handleQuickAction}
+    >
+      {currentTab === 'dashboard' && (
+        <DashboardPage
+          onNavigate={(tab) => setCurrentTab(tab)}
+          onOpenQuickSale={() => setCurrentTab('own-shop-sales')}
+          onOpenNewLoad={() => {
+            setInitialOpenNewLoad(true);
+            setCurrentTab('purchases');
+          }}
+        />
+      )}
+
+      {currentTab === 'purchases' && (
+        <PurchasesPage onShowToast={addToast} initialOpenNewModal={initialOpenNewLoad} />
+      )}
+
+      {currentTab === 'suppliers' && (
+        <SuppliersPage
+          onShowToast={addToast}
+          onOpenLedgerTab={(supId) => {
+            setSelectedSupplierForLedger(supId);
+            setCurrentTab('dealer-ledger');
+          }}
+        />
+      )}
+
+      {currentTab === 'inventory' && <InventoryPage onShowToast={addToast} />}
+
+      {currentTab === 'shops' && <WholesalePage onShowToast={addToast} />}
+
+      {currentTab === 'own-shop-sales' && <OwnShopSalesPage onShowToast={addToast} />}
+
+      {currentTab === 'dealer-ledger' && (
+        <DealerLedgerPage
+          onShowToast={addToast}
+          selectedSupplierId={selectedSupplierForLedger}
+        />
+      )}
+
+      {currentTab === 'workers' && <WorkersPage onShowToast={addToast} />}
+
+      {currentTab === 'expenses' && <ExpensesPage onShowToast={addToast} />}
+
+      {currentTab === 'reports' && <ReportsPage onShowToast={addToast} />}
+
+      {currentTab === 'settings' && <SettingsPage onShowToast={addToast} />}
+
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </FloatingIslandShell>
+  );
+}
+
+export default function App() {
+  return (
     <ThemeProvider>
-      <FloatingIslandShell
-        currentTab={currentTab}
-        onSelectTab={(tab) => {
-          setCurrentTab(tab);
-          setInitialOpenNewLoad(false);
-        }}
-        availableStock={availableStock}
-        onQuickAction={handleQuickAction}
-      >
-        {/* Dynamic Page Views */}
-        {currentTab === 'dashboard' && (
-          <DashboardPage
-            onNavigate={(tab) => setCurrentTab(tab)}
-            onOpenQuickSale={() => setCurrentTab('own-shop-sales')}
-            onOpenNewLoad={() => {
-              setInitialOpenNewLoad(true);
-              setCurrentTab('purchases');
-            }}
-          />
-        )}
-
-        {currentTab === 'purchases' && (
-          <PurchasesPage
-            onShowToast={addToast}
-            initialOpenNewModal={initialOpenNewLoad}
-          />
-        )}
-
-        {currentTab === 'suppliers' && (
-          <SuppliersPage
-            onShowToast={addToast}
-            onOpenLedgerTab={(supId) => {
-              setSelectedSupplierForLedger(supId);
-              setCurrentTab('dealer-ledger');
-            }}
-          />
-        )}
-
-        {currentTab === 'inventory' && (
-          <InventoryPage onShowToast={addToast} />
-        )}
-
-        {currentTab === 'shops' && (
-          <WholesalePage onShowToast={addToast} />
-        )}
-
-        {currentTab === 'own-shop-sales' && (
-          <OwnShopSalesPage onShowToast={addToast} />
-        )}
-
-        {currentTab === 'dealer-ledger' && (
-          <DealerLedgerPage
-            onShowToast={addToast}
-            selectedSupplierId={selectedSupplierForLedger}
-          />
-        )}
-
-        {currentTab === 'workers' && (
-          <WorkersPage onShowToast={addToast} />
-        )}
-
-        {currentTab === 'expenses' && (
-          <ExpensesPage onShowToast={addToast} />
-        )}
-
-        {currentTab === 'reports' && (
-          <ReportsPage onShowToast={addToast} />
-        )}
-
-        {currentTab === 'settings' && (
-          <SettingsPage onShowToast={addToast} />
-        )}
-
-        {/* Floating Toast Notification Stack */}
-        <ToastContainer toasts={toasts} onDismiss={removeToast} />
-      </FloatingIslandShell>
+      <ErrorBoundary>
+        <AppShellContent />
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }

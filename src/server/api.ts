@@ -143,7 +143,8 @@ apiRouter.post('/suppliers', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Supplier name is required' });
     }
 
-    const opBal = Number(openingBalance || 0);
+    const parsedBal = Number(openingBalance ?? 0);
+    const opBal = Number.isFinite(parsedBal) ? parsedBal : 0;
 
     const [created] = await db
       .insert(suppliers)
@@ -156,7 +157,7 @@ apiRouter.post('/suppliers', async (req: Request, res: Response) => {
       })
       .returning();
 
-    // If opening balance > 0, record initial opening transaction
+    // If opening balance != 0, record initial opening transaction
     if (opBal !== 0) {
       await db.insert(dealerTransactions).values({
         supplierId: created.id,
@@ -170,7 +171,12 @@ apiRouter.post('/suppliers', async (req: Request, res: Response) => {
       });
     }
 
-    res.status(201).json(created);
+    res.status(201).json({
+      ...created,
+      currentBalance: opBal,
+      totalPurchasesAmount: 0,
+      purchaseCount: 0,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1018,8 +1024,8 @@ apiRouter.post('/sales/own-shop', async (req: Request, res: Response) => {
 
     // Generate invoice number: INV-YYYYMMDD-XXXX
     const dateStr = saleDate || getPakistanDate();
-    const countToday = await db.select({ count: sql<number>`count(*)` }).from(sales);
-    const invoiceNumber = `INV-${dateStr.replace(/-/g, '')}-${String(Number(countToday[0]?.count || 0) + 1).padStart(4, '0')}`;
+    const maxSale = await db.select({ maxId: sql<number>`coalesce(max(id), 0)` }).from(sales);
+    const invoiceNumber = `INV-${dateStr.replace(/-/g, '')}-${String(Number(maxSale[0]?.maxId || 0) + 1).padStart(4, '0')}`;
 
     // 4. Save sale record
     const [savedSale] = await db
@@ -1144,8 +1150,8 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
     const metrics = calculateSaleMetrics(amount, pieces, fifoResult.totalCost);
 
     const dateStr = saleDate || getPakistanDate();
-    const countToday = await db.select({ count: sql<number>`count(*)` }).from(sales);
-    const invoiceNumber = `WHL-${dateStr.replace(/-/g, '')}-${String(Number(countToday[0]?.count || 0) + 1).padStart(4, '0')}`;
+    const maxSale = await db.select({ maxId: sql<number>`coalesce(max(id), 0)` }).from(sales);
+    const invoiceNumber = `WHL-${dateStr.replace(/-/g, '')}-${String(Number(maxSale[0]?.maxId || 0) + 1).padStart(4, '0')}`;
 
     const [savedSale] = await db
       .insert(sales)
@@ -1369,6 +1375,29 @@ apiRouter.post('/workers/:id/payments', async (req: Request, res: Response) => {
       .returning();
 
     res.status(201).json(pmt);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.get('/worker-payments', async (_req: Request, res: Response) => {
+  try {
+    const payments = await db
+      .select({
+        id: workerPayments.id,
+        workerId: workerPayments.workerId,
+        workerName: workers.name,
+        amount: workerPayments.amount,
+        paymentDate: workerPayments.paymentDate,
+        paymentMethod: workerPayments.paymentMethod,
+        description: workerPayments.description,
+        createdAt: workerPayments.createdAt,
+      })
+      .from(workerPayments)
+      .innerJoin(workers, eq(workerPayments.workerId, workers.id))
+      .orderBy(desc(workerPayments.paymentDate), desc(workerPayments.id));
+
+    res.json(payments);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1798,13 +1827,70 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
     const totalPurchasesAmount = purchasesList.reduce((sum, p) => sum + Number(p.purchaseAmount), 0);
     const totalPurchasesWeight = purchasesList.reduce((sum, p) => sum + Number(p.totalWeightKg), 0);
 
-    // 5. Landed Load Expenses in period
+    // 5. Landed Load Expenses in period (with load & supplier details)
     const loadExpList = await db
-      .select()
+      .select({
+        id: loadExpenses.id,
+        purchaseLoadId: loadExpenses.purchaseLoadId,
+        loadNumber: purchaseLoads.loadNumber,
+        supplierName: suppliers.name,
+        category: loadExpenses.category,
+        amount: loadExpenses.amount,
+        expenseDate: loadExpenses.expenseDate,
+        description: loadExpenses.description,
+        createdAt: loadExpenses.createdAt,
+      })
       .from(loadExpenses)
-      .where(and(gte(loadExpenses.expenseDate, startDate), lte(loadExpenses.expenseDate, endDate)));
+      .innerJoin(purchaseLoads, eq(loadExpenses.purchaseLoadId, purchaseLoads.id))
+      .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
+      .where(and(gte(loadExpenses.expenseDate, startDate), lte(loadExpenses.expenseDate, endDate)))
+      .orderBy(desc(loadExpenses.expenseDate), desc(loadExpenses.id));
 
     const totalLoadExpAmount = loadExpList.reduce((sum, e) => sum + Number(e.amount), 0);
+
+    // 6. Dealer Payments in period
+    const dealerPaymentsList = await db
+      .select({
+        id: dealerTransactions.id,
+        supplierId: dealerTransactions.supplierId,
+        supplierName: suppliers.name,
+        transactionDate: dealerTransactions.transactionDate,
+        transactionType: dealerTransactions.transactionType,
+        debitAmount: dealerTransactions.debitAmount,
+        creditAmount: dealerTransactions.creditAmount,
+        balanceAfter: dealerTransactions.balanceAfter,
+        referenceType: dealerTransactions.referenceType,
+        referenceId: dealerTransactions.referenceId,
+        paymentMethod: dealerTransactions.paymentMethod,
+        notes: dealerTransactions.notes,
+        createdAt: dealerTransactions.createdAt,
+      })
+      .from(dealerTransactions)
+      .innerJoin(suppliers, eq(dealerTransactions.supplierId, suppliers.id))
+      .where(
+        and(
+          gte(dealerTransactions.transactionDate, startDate),
+          lte(dealerTransactions.transactionDate, endDate),
+          eq(dealerTransactions.transactionType, 'PAYMENT_CREDIT')
+        )
+      )
+      .orderBy(desc(dealerTransactions.transactionDate), desc(dealerTransactions.id));
+
+    // 7. Current Stock Valuation
+    const activeBatchesList = await db
+      .select()
+      .from(stockBatches)
+      .where(eq(stockBatches.isClosed, false));
+
+    const stockValuation = {
+      totalPieces: activeBatchesList.reduce((s, b) => s + b.remainingPieces, 0),
+      totalValue: Number(
+        activeBatchesList
+          .reduce((s, b) => s + b.remainingPieces * Number(b.costPerPiece), 0)
+          .toFixed(2)
+      ),
+      activeBatchesCount: activeBatchesList.length,
+    };
 
     // P&L calculation
     const pnl = calculatePnl(totalRev, totalCogs, generalExpTotal, workerExpTotal);
@@ -1833,6 +1919,9 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
       generalExpenses: expensesList,
       workerPayments: workerPaymentsList,
       purchases: purchasesList,
+      loadExpenses: loadExpList,
+      dealerPayments: dealerPaymentsList,
+      stockValuation,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1840,484 +1929,796 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// 14. SEED DATA (Authentic Pakistani Poultry Business)
+// 14. SEED DATA HELPER & UNIFIED BOOTSTRAP
 // -------------------------------------------------------------
-apiRouter.post('/seed', async (_req: Request, res: Response) => {
-  try {
-    // Check if suppliers already exist
+async function runSeed(force = false): Promise<{ seeded: boolean; message: string }> {
+  if (!force) {
     const supCount = await db.select({ count: sql<number>`count(*)` }).from(suppliers);
     if (Number(supCount[0]?.count || 0) > 0) {
-      return res.json({ message: 'Database already has data. Skipping seed.' });
+      return { seeded: false, message: 'Database already has data. Skipping seed.' };
     }
+  } else {
+    // Cleanly reset all tables in dependency order
+    await db.delete(saleItems);
+    await db.delete(sales);
+    await db.delete(stockMovements);
+    await db.delete(stockBatches);
+    await db.delete(loadExpenses);
+    await db.delete(dealerTransactions);
+    await db.delete(purchaseLoads);
+    await db.delete(workerPayments);
+    await db.delete(workers);
+    await db.delete(businessExpenses);
+    await db.delete(shops);
+    await db.delete(vehicles);
+    await db.delete(suppliers);
+  }
 
-    const todayStr = getPakistanDate();
-    const d1 = new Date();
-    d1.setDate(d1.getDate() - 3);
-    const date3DaysAgo = getPakistanDate(d1);
+  const todayStr = getPakistanDate();
+  const d1 = new Date();
+  d1.setDate(d1.getDate() - 3);
+  const date3DaysAgo = getPakistanDate(d1);
 
-    const d2 = new Date();
-    d2.setDate(d2.getDate() - 1);
-    const dateYesterday = getPakistanDate(d2);
+  const d2 = new Date();
+  d2.setDate(d2.getDate() - 1);
+  const dateYesterday = getPakistanDate(d2);
 
-    // 1. Create Suppliers in Punjab
-    const [sup1] = await db
-      .insert(suppliers)
-      .values({
-        name: 'Chaudhry Poultry Farms',
-        phone: '0300-8451234',
-        address: 'Kamoke G.T. Road, Gujranwala, Punjab',
-        openingBalance: '150000.00',
-        notes: 'Primary supplier for heavy broiler birds',
-      })
-      .returning();
+  // 1. Create Suppliers in Punjab
+  const [sup1] = await db
+    .insert(suppliers)
+    .values({
+      name: 'Chaudhry Poultry Farms',
+      phone: '0300-8451234',
+      address: 'Kamoke G.T. Road, Gujranwala',
+      openingBalance: '150000.00',
+      notes: 'Main supplier for heavy broiler chickens',
+    })
+    .returning();
 
-    const [sup2] = await db
-      .insert(suppliers)
-      .values({
-        name: 'Mian Brothers Hatchery & Broilers',
-        phone: '0321-7654321',
-        address: 'Sheikhupura Bypass, Punjab',
-        openingBalance: '50000.00',
-        notes: 'Reliable supplier, fast delivery',
-      })
-      .returning();
+  const [sup2] = await db
+    .insert(suppliers)
+    .values({
+      name: 'Mian Brothers Hatchery',
+      phone: '0321-7654321',
+      address: 'Sheikhupura Bypass',
+      openingBalance: '50000.00',
+      notes: 'Fast delivery medium broiler supplier',
+    })
+    .returning();
 
-    // Opening balances
-    await db.insert(dealerTransactions).values([
-      {
-        supplierId: sup1.id,
-        transactionDate: date3DaysAgo,
-        transactionType: 'PURCHASE_DEBIT',
-        debitAmount: '150000.00',
-        creditAmount: '0.00',
-        balanceAfter: '150000.00',
-        referenceType: 'OPENING_BALANCE',
-        notes: 'Opening balance brought forward',
-      },
-      {
-        supplierId: sup2.id,
-        transactionDate: date3DaysAgo,
-        transactionType: 'PURCHASE_DEBIT',
-        debitAmount: '50000.00',
-        creditAmount: '0.00',
-        balanceAfter: '50000.00',
-        referenceType: 'OPENING_BALANCE',
-        notes: 'Opening balance brought forward',
-      },
-    ]);
-
-    // 2. Vehicles
-    await db.insert(vehicles).values([
-      {
-        vehicleNumber: 'LES-4921',
-        driverName: 'Muhammad Aslam',
-        driverPhone: '0312-4411223',
-        notes: 'Mazda Titan 14ft Open Cage',
-      },
-      {
-        vehicleNumber: 'GA-8119',
-        driverName: 'Rashid Mehmood',
-        driverPhone: '0345-9988776',
-        notes: 'Hino Dutro',
-      },
-    ]);
-
-    // 3. Wholesale Distribution Shops
-    const [shop1] = await db
-      .insert(shops)
-      .values({
-        shopName: 'Bismillah Chicken Center',
-        ownerName: 'Tariq Butt',
-        phone: '0333-4123890',
-        address: 'Main Market, Gulberg, Lahore',
-      })
-      .returning();
-
-    const [shop2] = await db
-      .insert(shops)
-      .values({
-        shopName: 'Madina Meat & Poultry Shop',
-        ownerName: 'Haji Farooq',
-        phone: '0301-5544332',
-        address: 'Saddar Bazaar, Lahore Cantt',
-      })
-      .returning();
-
-    // 4. Workers
-    const [worker1] = await db
-      .insert(workers)
-      .values({
-        name: 'Akram Masih',
-        phone: '0322-1122334',
-        notes: 'Head cutter and shop supervisor',
-        isActive: true,
-      })
-      .returning();
-
-    const [worker2] = await db
-      .insert(workers)
-      .values({
-        name: 'Zahid Khan',
-        phone: '0315-7766554',
-        notes: 'Loader & transport helper',
-        isActive: true,
-      })
-      .returning();
-
-    // 5. Purchase Load 1 (3 days ago from Chaudhry Poultry)
-    const [load1] = await db
-      .insert(purchaseLoads)
-      .values({
-        loadNumber: `LOAD-${date3DaysAgo.replace(/-/g, '')}-001`,
-        supplierId: sup1.id,
-        purchaseDate: date3DaysAgo,
-        totalWeightKg: '4500.00',
-        purchaseAmount: '1350000.00', // Rs. 300 / KG
-        vehicleNumber: 'LES-4921',
-        driverName: 'Muhammad Aslam',
-        status: 'RECEIVED',
-        notes: 'Loaded 4,500 KG live broilers from Gujranwala',
-      })
-      .returning();
-
-    // Update dealer ledger for Load 1
-    await db.insert(dealerTransactions).values({
+  await db.insert(dealerTransactions).values([
+    {
       supplierId: sup1.id,
       transactionDate: date3DaysAgo,
       transactionType: 'PURCHASE_DEBIT',
-      debitAmount: '1350000.00',
+      debitAmount: '150000.00',
       creditAmount: '0.00',
-      balanceAfter: '1500000.00',
-      referenceType: 'PURCHASE_LOAD',
-      referenceId: load1.id,
-      notes: `Purchase Load ${load1.loadNumber} (4,500 KG @ PKR 300/KG)`,
-    });
-
-    // Load 1 Expenses
-    await db.insert(loadExpenses).values([
-      {
-        purchaseLoadId: load1.id,
-        category: 'Fuel',
-        amount: '22000.00',
-        expenseDate: date3DaysAgo,
-        description: 'Diesel Gujranwala to Lahore',
-      },
-      {
-        purchaseLoadId: load1.id,
-        category: 'Loading',
-        amount: '6000.00',
-        expenseDate: date3DaysAgo,
-        description: 'Farm loaders fee',
-      },
-      {
-        purchaseLoadId: load1.id,
-        category: 'Driver Expense',
-        amount: '4000.00',
-        expenseDate: date3DaysAgo,
-        description: 'Driver daily bhatta and food',
-      },
-    ]);
-
-    // Load 1 Total landed cost: 1,350,000 + 32,000 = 1,382,000
-    // Received: 900 pieces, 12 dead, 8 damaged => 880 saleable pieces
-    // Cost per piece = 1,382,000 / 880 = 1,570.45
-    const [batch1] = await db
-      .insert(stockBatches)
-      .values({
-        batchNumber: `BATCH-${load1.loadNumber}`,
-        purchaseLoadId: load1.id,
-        receivingDate: date3DaysAgo,
-        receivedPieces: 900,
-        deadPieces: 12,
-        damagedPieces: 8,
-        originalSaleablePieces: 880,
-        soldPieces: 550,
-        remainingPieces: 330,
-        purchaseAmount: '1350000.00',
-        totalLoadExpenses: '32000.00',
-        totalLandedCost: '1382000.00',
-        costPerPiece: '1570.45',
-        isClosed: false,
-        notes: 'Initial heavy broiler batch',
-      })
-      .returning();
-
-    await db.insert(stockMovements).values({
-      stockBatchId: batch1.id,
-      movementType: 'STOCK_IN',
-      quantity: 880,
-      balanceAfter: 880,
-      unitCost: '1570.45',
-      referenceType: 'PURCHASE_LOAD',
-      referenceId: load1.id,
-      notes: 'Received 900 pcs (12 dead, 8 damaged)',
-    });
-
-    // 6. Purchase Load 2 (Yesterday from Mian Brothers)
-    const [load2] = await db
-      .insert(purchaseLoads)
-      .values({
-        loadNumber: `LOAD-${dateYesterday.replace(/-/g, '')}-001`,
-        supplierId: sup2.id,
-        purchaseDate: dateYesterday,
-        totalWeightKg: '3000.00',
-        purchaseAmount: '930000.00', // Rs. 310 / KG
-        vehicleNumber: 'GA-8119',
-        driverName: 'Rashid Mehmood',
-        status: 'RECEIVED',
-        notes: 'Sheikhupura medium broiler load',
-      })
-      .returning();
-
-    await db.insert(dealerTransactions).values({
+      balanceAfter: '150000.00',
+      referenceType: 'OPENING_BALANCE',
+      notes: 'Previous balance carried forward',
+    },
+    {
       supplierId: sup2.id,
-      transactionDate: dateYesterday,
+      transactionDate: date3DaysAgo,
       transactionType: 'PURCHASE_DEBIT',
-      debitAmount: '930000.00',
+      debitAmount: '50000.00',
       creditAmount: '0.00',
-      balanceAfter: '980000.00',
-      referenceType: 'PURCHASE_LOAD',
-      referenceId: load2.id,
-      notes: `Purchase Load ${load2.loadNumber} (3,000 KG @ PKR 310/KG)`,
-    });
+      balanceAfter: '50000.00',
+      referenceType: 'OPENING_BALANCE',
+      notes: 'Previous balance carried forward',
+    },
+  ]);
 
-    await db.insert(loadExpenses).values([
-      {
-        purchaseLoadId: load2.id,
-        category: 'Transportation',
-        amount: '18000.00',
-        expenseDate: dateYesterday,
-        description: 'Transport fare',
-      },
-      {
-        purchaseLoadId: load2.id,
-        category: 'Unloading',
-        amount: '4000.00',
-        expenseDate: dateYesterday,
-        description: 'Unloading at shop',
-      },
-    ]);
+  // 2. Vehicles
+  await db.insert(vehicles).values([
+    {
+      vehicleNumber: 'LES-4921',
+      driverName: 'Muhammad Aslam',
+      driverPhone: '0312-4411223',
+      notes: 'Mazda Titan 14ft Open Cage',
+    },
+    {
+      vehicleNumber: 'GA-8119',
+      driverName: 'Rashid Mehmood',
+      driverPhone: '0345-9988776',
+      notes: 'Hino Dutro',
+    },
+  ]);
 
-    // Load 2 Landed Cost: 930,000 + 22,000 = 952,000
-    // Received: 600 pieces, 6 dead, 4 damaged => 590 saleable pieces
-    // Cost per piece = 952,000 / 590 = 1,613.56
-    const [batch2] = await db
-      .insert(stockBatches)
-      .values({
-        batchNumber: `BATCH-${load2.loadNumber}`,
-        purchaseLoadId: load2.id,
-        receivingDate: dateYesterday,
-        receivedPieces: 600,
-        deadPieces: 6,
-        damagedPieces: 4,
-        originalSaleablePieces: 590,
-        soldPieces: 100,
-        remainingPieces: 490,
-        purchaseAmount: '930000.00',
-        totalLoadExpenses: '22000.00',
-        totalLandedCost: '952000.00',
-        costPerPiece: '1613.56',
-        isClosed: false,
-        notes: 'Fresh birds Sheikhupura',
-      })
-      .returning();
+  // 3. Wholesale Shops
+  const [shop1] = await db
+    .insert(shops)
+    .values({
+      shopName: 'Bismillah Chicken Center',
+      ownerName: 'Tariq Butt',
+      phone: '0333-4123890',
+      address: 'Main Market, Gulberg, Lahore',
+    })
+    .returning();
 
-    await db.insert(stockMovements).values({
-      stockBatchId: batch2.id,
-      movementType: 'STOCK_IN',
-      quantity: 590,
-      balanceAfter: 590,
-      unitCost: '1613.56',
-      referenceType: 'PURCHASE_LOAD',
-      referenceId: load2.id,
-      notes: 'Received 600 pcs (6 dead, 4 damaged)',
-    });
+  const [shop2] = await db
+    .insert(shops)
+    .values({
+      shopName: 'Madina Meat & Poultry Shop',
+      ownerName: 'Haji Farooq',
+      phone: '0301-5544332',
+      address: 'Saddar Bazaar, Lahore Cantt',
+    })
+    .returning();
 
-    // 7. Seed Sales
-    // Sale 1: Yesterday Own Shop Sale (300 pcs @ Rs. 1,850/pc = 555,000)
-    const [sale1] = await db
-      .insert(sales)
-      .values({
-        invoiceNumber: `INV-${dateYesterday.replace(/-/g, '')}-0001`,
-        saleType: 'OWN_SHOP',
-        saleDate: dateYesterday,
-        totalPieces: 300,
-        totalAmount: '555000.00',
-        totalCost: '471135.00', // 300 * 1570.45
-        totalProfit: '83865.00',
-        sellingPricePerPiece: '1850.00',
-        costPerPiece: '1570.45',
-        profitPerPiece: '279.55',
-        notes: 'Evening retail sales',
-      })
-      .returning();
+  // 4. Workers
+  const [worker1] = await db
+    .insert(workers)
+    .values({
+      name: 'Akram Masih',
+      phone: '0322-1122334',
+      notes: 'Head cutter and shop supervisor',
+      isActive: true,
+    })
+    .returning();
 
-    await db.insert(saleItems).values({
-      saleId: sale1.id,
-      stockBatchId: batch1.id,
-      quantity: 300,
-      unitCost: '1570.45',
-      totalCost: '471135.00',
-    });
+  const [worker2] = await db
+    .insert(workers)
+    .values({
+      name: 'Zahid Khan',
+      phone: '0315-7766554',
+      notes: 'Loader & transport helper',
+      isActive: true,
+    })
+    .returning();
 
-    await db.insert(stockMovements).values({
-      stockBatchId: batch1.id,
-      movementType: 'SALE_OUT',
-      quantity: -300,
-      balanceAfter: 580,
-      unitCost: '1570.45',
-      referenceType: 'SALE',
-      referenceId: sale1.id,
-      notes: `Own shop sale ${sale1.invoiceNumber}`,
-    });
-
-    // Sale 2: Yesterday Wholesale Sale to Bismillah Chicken (150 pcs @ Rs. 1,800/pc = 270,000)
-    const [sale2] = await db
-      .insert(sales)
-      .values({
-        invoiceNumber: `WHL-${dateYesterday.replace(/-/g, '')}-0001`,
-        saleType: 'WHOLESALE',
-        saleDate: dateYesterday,
-        shopId: shop1.id,
-        totalPieces: 150,
-        totalAmount: '270000.00',
-        totalCost: '235567.50', // 150 * 1570.45
-        totalProfit: '34432.50',
-        sellingPricePerPiece: '1800.00',
-        costPerPiece: '1570.45',
-        profitPerPiece: '229.55',
-        notes: 'Delivered to Gulberg shop',
-      })
-      .returning();
-
-    await db.insert(saleItems).values({
-      saleId: sale2.id,
-      stockBatchId: batch1.id,
-      quantity: 150,
-      unitCost: '1570.45',
-      totalCost: '235567.50',
-    });
-
-    // Sale 3: Today Own Shop Sale (100 pcs @ Rs. 1,880/pc = 188,000)
-    // Consumes 100 pcs from batch1
-    const [sale3] = await db
-      .insert(sales)
-      .values({
-        invoiceNumber: `INV-${todayStr.replace(/-/g, '')}-0001`,
-        saleType: 'OWN_SHOP',
-        saleDate: todayStr,
-        totalPieces: 100,
-        totalAmount: '188000.00',
-        totalCost: '157045.00', // 100 * 1570.45
-        totalProfit: '30955.00',
-        sellingPricePerPiece: '1880.00',
-        costPerPiece: '1570.45',
-        profitPerPiece: '309.55',
-        notes: 'Morning retail walk-ins',
-      })
-      .returning();
-
-    await db.insert(saleItems).values({
-      saleId: sale3.id,
-      stockBatchId: batch1.id,
-      quantity: 100,
-      unitCost: '1570.45',
-      totalCost: '157045.00',
-    });
-
-    // Sale 4: Today Wholesale Sale to Madina Meat (100 pcs from batch2 @ Rs. 1,850/pc = 185,000)
-    const [sale4] = await db
-      .insert(sales)
-      .values({
-        invoiceNumber: `WHL-${todayStr.replace(/-/g, '')}-0001`,
-        saleType: 'WHOLESALE',
-        saleDate: todayStr,
-        shopId: shop2.id,
-        totalPieces: 100,
-        totalAmount: '185000.00',
-        totalCost: '161356.00', // 100 * 1613.56
-        totalProfit: '23644.00',
-        sellingPricePerPiece: '1850.00',
-        costPerPiece: '1613.56',
-        profitPerPiece: '236.44',
-        notes: 'Delivered to Lahore Cantt shop',
-      })
-      .returning();
-
-    await db.insert(saleItems).values({
-      saleId: sale4.id,
-      stockBatchId: batch2.id,
-      quantity: 100,
-      unitCost: '1613.56',
-      totalCost: '161356.00',
-    });
-
-    // 8. Dealer Payment to Chaudhry Poultry (Paid PKR 500,000)
-    await db.insert(dealerTransactions).values({
+  // 5. Purchase Load 1 (3 days ago from Chaudhry Poultry - RECEIVED)
+  const [load1] = await db
+    .insert(purchaseLoads)
+    .values({
+      loadNumber: `LOAD-${date3DaysAgo.replace(/-/g, '')}-001`,
       supplierId: sup1.id,
-      transactionDate: todayStr,
-      transactionType: 'PAYMENT_CREDIT',
-      debitAmount: '0.00',
-      creditAmount: '500000.00',
-      balanceAfter: '1000000.00', // 1,500,000 - 500,000
-      referenceType: 'PAYMENT',
-      paymentMethod: 'BANK_TRANSFER',
-      notes: 'HBL Online transfer partial payment',
-    });
+      purchaseDate: date3DaysAgo,
+      totalWeightKg: '4500.00',
+      purchaseAmount: '1350000.00',
+      vehicleNumber: 'LES-4921',
+      driverName: 'Muhammad Aslam',
+      status: 'RECEIVED',
+      notes: '4,500 KG live birds from Gujranwala',
+    })
+    .returning();
 
-    // 9. General Business Expenses
-    await db.insert(businessExpenses).values([
-      {
-        category: 'Electricity',
-        amount: '18500.00',
-        expenseDate: dateYesterday,
-        paymentMethod: 'CASH',
-        description: 'LESCO commercial shop electricity bill',
-      },
-      {
-        category: 'Food',
-        amount: '1500.00',
-        expenseDate: todayStr,
-        paymentMethod: 'CASH',
-        description: 'Staff lunch',
-      },
-      {
-        category: 'Tea',
-        amount: '800.00',
-        expenseDate: todayStr,
-        paymentMethod: 'CASH',
-        description: 'Daily tea and refreshments',
-      },
-      {
-        category: 'Cleaning',
-        amount: '1200.00',
-        expenseDate: todayStr,
-        paymentMethod: 'CASH',
-        description: 'Disinfectant phenyl & cleaning supplies',
-      },
-    ]);
+  await db.insert(dealerTransactions).values({
+    supplierId: sup1.id,
+    transactionDate: date3DaysAgo,
+    transactionType: 'PURCHASE_DEBIT',
+    debitAmount: '1350000.00',
+    creditAmount: '0.00',
+    balanceAfter: '1500000.00',
+    referenceType: 'PURCHASE_LOAD',
+    referenceId: load1.id,
+    notes: `Truck ${load1.loadNumber} (4,500 KG @ PKR 300/KG)`,
+  });
 
-    // 10. Worker Payments
-    await db.insert(workerPayments).values([
-      {
-        workerId: worker1.id,
-        amount: '5000.00',
-        paymentDate: todayStr,
-        paymentMethod: 'CASH',
-        description: 'Weekly cash wage payment',
-      },
-      {
-        workerId: worker2.id,
-        amount: '3500.00',
-        paymentDate: todayStr,
-        paymentMethod: 'CASH',
-        description: 'Weekly wage payment',
-      },
-    ]);
+  await db.insert(loadExpenses).values([
+    {
+      purchaseLoadId: load1.id,
+      category: 'Fuel',
+      amount: '22000.00',
+      expenseDate: date3DaysAgo,
+      description: 'Diesel Gujranwala to Lahore',
+    },
+    {
+      purchaseLoadId: load1.id,
+      category: 'Loading',
+      amount: '6000.00',
+      expenseDate: date3DaysAgo,
+      description: 'Farm loaders fee',
+    },
+    {
+      purchaseLoadId: load1.id,
+      category: 'Driver Expense',
+      amount: '4000.00',
+      expenseDate: date3DaysAgo,
+      description: 'Driver daily allowance & meal',
+    },
+  ]);
 
-    res.json({ success: true, message: 'Database successfully seeded with realistic poultry business data' });
+  const [batch1] = await db
+    .insert(stockBatches)
+    .values({
+      batchNumber: `BATCH-${load1.loadNumber}`,
+      purchaseLoadId: load1.id,
+      receivingDate: date3DaysAgo,
+      receivedPieces: 900,
+      deadPieces: 12,
+      damagedPieces: 8,
+      originalSaleablePieces: 880,
+      soldPieces: 550,
+      remainingPieces: 330,
+      purchaseAmount: '1350000.00',
+      totalLoadExpenses: '32000.00',
+      totalLandedCost: '1382000.00',
+      costPerPiece: '1570.45',
+      isClosed: false,
+      notes: 'Heavy broiler birds batch',
+    })
+    .returning();
+
+  await db.insert(stockMovements).values({
+    stockBatchId: batch1.id,
+    movementType: 'STOCK_IN',
+    quantity: 880,
+    balanceAfter: 880,
+    unitCost: '1570.45',
+    referenceType: 'PURCHASE_LOAD',
+    referenceId: load1.id,
+    notes: 'Received 900 birds (12 dead, 8 damaged)',
+  });
+
+  // 6. Purchase Load 2 (Yesterday from Mian Brothers - RECEIVED)
+  const [load2] = await db
+    .insert(purchaseLoads)
+    .values({
+      loadNumber: `LOAD-${dateYesterday.replace(/-/g, '')}-001`,
+      supplierId: sup2.id,
+      purchaseDate: dateYesterday,
+      totalWeightKg: '3000.00',
+      purchaseAmount: '930000.00',
+      vehicleNumber: 'GA-8119',
+      driverName: 'Rashid Mehmood',
+      status: 'RECEIVED',
+      notes: 'Sheikhupura medium broiler truck',
+    })
+    .returning();
+
+  await db.insert(dealerTransactions).values({
+    supplierId: sup2.id,
+    transactionDate: dateYesterday,
+    transactionType: 'PURCHASE_DEBIT',
+    debitAmount: '930000.00',
+    creditAmount: '0.00',
+    balanceAfter: '980000.00',
+    referenceType: 'PURCHASE_LOAD',
+    referenceId: load2.id,
+    notes: `Truck ${load2.loadNumber} (3,000 KG @ PKR 310/KG)`,
+  });
+
+  await db.insert(loadExpenses).values([
+    {
+      purchaseLoadId: load2.id,
+      category: 'Transportation',
+      amount: '18000.00',
+      expenseDate: dateYesterday,
+      description: 'Truck fare',
+    },
+    {
+      purchaseLoadId: load2.id,
+      category: 'Unloading',
+      amount: '4000.00',
+      expenseDate: dateYesterday,
+      description: 'Unloading at shop',
+    },
+  ]);
+
+  const [batch2] = await db
+    .insert(stockBatches)
+    .values({
+      batchNumber: `BATCH-${load2.loadNumber}`,
+      purchaseLoadId: load2.id,
+      receivingDate: dateYesterday,
+      receivedPieces: 600,
+      deadPieces: 6,
+      damagedPieces: 4,
+      originalSaleablePieces: 590,
+      soldPieces: 100,
+      remainingPieces: 490,
+      purchaseAmount: '930000.00',
+      totalLoadExpenses: '22000.00',
+      totalLandedCost: '952000.00',
+      costPerPiece: '1613.56',
+      isClosed: false,
+      notes: 'Fresh birds Sheikhupura',
+    })
+    .returning();
+
+  await db.insert(stockMovements).values({
+    stockBatchId: batch2.id,
+    movementType: 'STOCK_IN',
+    quantity: 590,
+    balanceAfter: 590,
+    unitCost: '1613.56',
+    referenceType: 'PURCHASE_LOAD',
+    referenceId: load2.id,
+    notes: 'Received 600 birds (6 dead, 4 damaged)',
+  });
+
+  // 6b. Purchase Load 3 (Today - PENDING_RECEIVING so user can test counting/receiving!)
+  const [load3] = await db
+    .insert(purchaseLoads)
+    .values({
+      loadNumber: `LOAD-${todayStr.replace(/-/g, '')}-001`,
+      supplierId: sup1.id,
+      purchaseDate: todayStr,
+      totalWeightKg: '2500.00',
+      purchaseAmount: '762500.00',
+      vehicleNumber: 'LES-4921',
+      driverName: 'Muhammad Aslam',
+      status: 'PENDING_RECEIVING',
+      notes: 'Morning fresh truck arrived, waiting for bird count',
+    })
+    .returning();
+
+  await db.insert(dealerTransactions).values({
+    supplierId: sup1.id,
+    transactionDate: todayStr,
+    transactionType: 'PURCHASE_DEBIT',
+    debitAmount: '762500.00',
+    creditAmount: '0.00',
+    balanceAfter: '2262500.00',
+    referenceType: 'PURCHASE_LOAD',
+    referenceId: load3.id,
+    notes: `Truck ${load3.loadNumber} (2,500 KG @ PKR 305/KG)`,
+  });
+
+  await db.insert(loadExpenses).values([
+    {
+      purchaseLoadId: load3.id,
+      category: 'Fuel',
+      amount: '15000.00',
+      expenseDate: todayStr,
+      description: 'Diesel & toll tax',
+    },
+  ]);
+
+  // 7. Synced Sales + Stock Movements
+  const [sale1] = await db
+    .insert(sales)
+    .values({
+      invoiceNumber: `INV-${dateYesterday.replace(/-/g, '')}-0001`,
+      saleType: 'OWN_SHOP',
+      saleDate: dateYesterday,
+      totalPieces: 300,
+      totalAmount: '555000.00',
+      totalCost: '471135.00',
+      totalProfit: '83865.00',
+      sellingPricePerPiece: '1850.00',
+      costPerPiece: '1570.45',
+      profitPerPiece: '279.55',
+      notes: 'Evening retail counter sales',
+    })
+    .returning();
+
+  await db.insert(saleItems).values({
+    saleId: sale1.id,
+    stockBatchId: batch1.id,
+    quantity: 300,
+    unitCost: '1570.45',
+    totalCost: '471135.00',
+  });
+
+  await db.insert(stockMovements).values({
+    stockBatchId: batch1.id,
+    movementType: 'SALE_OUT',
+    quantity: -300,
+    balanceAfter: 580,
+    unitCost: '1570.45',
+    referenceType: 'SALE',
+    referenceId: sale1.id,
+    notes: `Counter sale ${sale1.invoiceNumber}`,
+  });
+
+  const [sale2] = await db
+    .insert(sales)
+    .values({
+      invoiceNumber: `WHL-${dateYesterday.replace(/-/g, '')}-0002`,
+      saleType: 'WHOLESALE',
+      saleDate: dateYesterday,
+      shopId: shop1.id,
+      totalPieces: 150,
+      totalAmount: '270000.00',
+      totalCost: '235567.50',
+      totalProfit: '34432.50',
+      sellingPricePerPiece: '1800.00',
+      costPerPiece: '1570.45',
+      profitPerPiece: '229.55',
+      notes: 'Delivered to Bismillah Chicken Center, Gulberg',
+    })
+    .returning();
+
+  await db.insert(saleItems).values({
+    saleId: sale2.id,
+    stockBatchId: batch1.id,
+    quantity: 150,
+    unitCost: '1570.45',
+    totalCost: '235567.50',
+  });
+
+  await db.insert(stockMovements).values({
+    stockBatchId: batch1.id,
+    movementType: 'WHOLESALE_OUT',
+    quantity: -150,
+    balanceAfter: 430,
+    unitCost: '1570.45',
+    referenceType: 'SHOP_DISTRIBUTION',
+    referenceId: sale2.id,
+    notes: `Wholesale delivery ${sale2.invoiceNumber} to Bismillah Chicken Center`,
+  });
+
+  const [sale3] = await db
+    .insert(sales)
+    .values({
+      invoiceNumber: `INV-${todayStr.replace(/-/g, '')}-0003`,
+      saleType: 'OWN_SHOP',
+      saleDate: todayStr,
+      totalPieces: 100,
+      totalAmount: '188000.00',
+      totalCost: '157045.00',
+      totalProfit: '30955.00',
+      sellingPricePerPiece: '1880.00',
+      costPerPiece: '1570.45',
+      profitPerPiece: '309.55',
+      notes: 'Morning counter sales',
+    })
+    .returning();
+
+  await db.insert(saleItems).values({
+    saleId: sale3.id,
+    stockBatchId: batch1.id,
+    quantity: 100,
+    unitCost: '1570.45',
+    totalCost: '157045.00',
+  });
+
+  await db.insert(stockMovements).values({
+    stockBatchId: batch1.id,
+    movementType: 'SALE_OUT',
+    quantity: -100,
+    balanceAfter: 330,
+    unitCost: '1570.45',
+    referenceType: 'SALE',
+    referenceId: sale3.id,
+    notes: `Counter sale ${sale3.invoiceNumber}`,
+  });
+
+  const [sale4] = await db
+    .insert(sales)
+    .values({
+      invoiceNumber: `WHL-${todayStr.replace(/-/g, '')}-0004`,
+      saleType: 'WHOLESALE',
+      saleDate: todayStr,
+      shopId: shop2.id,
+      totalPieces: 100,
+      totalAmount: '185000.00',
+      totalCost: '161356.00',
+      totalProfit: '23644.00',
+      sellingPricePerPiece: '1850.00',
+      costPerPiece: '1613.56',
+      profitPerPiece: '236.44',
+      notes: 'Delivered to Madina Meat & Poultry Shop, Cantt',
+    })
+    .returning();
+
+  await db.insert(saleItems).values({
+    saleId: sale4.id,
+    stockBatchId: batch2.id,
+    quantity: 100,
+    unitCost: '1613.56',
+    totalCost: '161356.00',
+  });
+
+  await db.insert(stockMovements).values({
+    stockBatchId: batch2.id,
+    movementType: 'WHOLESALE_OUT',
+    quantity: -100,
+    balanceAfter: 490,
+    unitCost: '1613.56',
+    referenceType: 'SHOP_DISTRIBUTION',
+    referenceId: sale4.id,
+    notes: `Wholesale delivery ${sale4.invoiceNumber} to Madina Meat & Poultry Shop`,
+  });
+
+  // 8. Dealer Payment to Chaudhry Poultry (Paid PKR 500,000 -> Balance = 2,262,500 - 500,000 = 1,762,500)
+  await db.insert(dealerTransactions).values({
+    supplierId: sup1.id,
+    transactionDate: todayStr,
+    transactionType: 'PAYMENT_CREDIT',
+    debitAmount: '0.00',
+    creditAmount: '500000.00',
+    balanceAfter: '1762500.00',
+    referenceType: 'PAYMENT',
+    paymentMethod: 'BANK_TRANSFER',
+    notes: 'HBL Online transfer partial payment',
+  });
+
+  // 9. General Business Expenses
+  await db.insert(businessExpenses).values([
+    {
+      category: 'Electricity',
+      amount: '18500.00',
+      expenseDate: dateYesterday,
+      paymentMethod: 'CASH',
+      description: 'LESCO commercial shop electricity bill',
+    },
+    {
+      category: 'Food',
+      amount: '1500.00',
+      expenseDate: todayStr,
+      paymentMethod: 'CASH',
+      description: 'Staff lunch',
+    },
+    {
+      category: 'Tea',
+      amount: '800.00',
+      expenseDate: todayStr,
+      paymentMethod: 'CASH',
+      description: 'Daily tea and refreshments',
+    },
+    {
+      category: 'Cleaning',
+      amount: '1200.00',
+      expenseDate: todayStr,
+      paymentMethod: 'CASH',
+      description: 'Disinfectant & cleaning supplies',
+    },
+  ]);
+
+  // 10. Worker Payments
+  await db.insert(workerPayments).values([
+    {
+      workerId: worker1.id,
+      amount: '5000.00',
+      paymentDate: todayStr,
+      paymentMethod: 'CASH',
+      description: 'Weekly cash wage payment',
+    },
+    {
+      workerId: worker2.id,
+      amount: '3500.00',
+      paymentDate: todayStr,
+      paymentMethod: 'CASH',
+      description: 'Weekly wage payment',
+    },
+  ]);
+
+  return { seeded: true, message: 'Demo business data loaded and synced across all modules' };
+}
+
+apiRouter.post('/seed', async (req: Request, res: Response) => {
+  try {
+    const force = Boolean(req.body?.force || req.query?.force === 'true');
+    const result = await runSeed(force);
+    res.json({ success: true, ...result });
   } catch (error: any) {
     console.error('Seed failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Unified Bootstrap Endpoint for Zustand Store
+apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
+  try {
+    // Auto-seed once on first launch if database is empty
+    await runSeed(false);
+
+    const [
+      allSuppliers,
+      allLoads,
+      allBatches,
+      allMovements,
+      allSales,
+      allShops,
+      allDealerTx,
+      allWorkers,
+      allWorkerPayments,
+      allExpenses,
+      allVehicles,
+      allSettings,
+    ] = await Promise.all([
+      db.select().from(suppliers).orderBy(asc(suppliers.name)),
+      db
+        .select({
+          id: purchaseLoads.id,
+          loadNumber: purchaseLoads.loadNumber,
+          supplierId: purchaseLoads.supplierId,
+          supplierName: suppliers.name,
+          purchaseDate: purchaseLoads.purchaseDate,
+          totalWeightKg: purchaseLoads.totalWeightKg,
+          purchaseAmount: purchaseLoads.purchaseAmount,
+          vehicleNumber: purchaseLoads.vehicleNumber,
+          driverName: purchaseLoads.driverName,
+          status: purchaseLoads.status,
+          notes: purchaseLoads.notes,
+          createdAt: purchaseLoads.createdAt,
+        })
+        .from(purchaseLoads)
+        .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
+        .orderBy(desc(purchaseLoads.purchaseDate), desc(purchaseLoads.id)),
+      db
+        .select({
+          id: stockBatches.id,
+          batchNumber: stockBatches.batchNumber,
+          purchaseLoadId: stockBatches.purchaseLoadId,
+          loadNumber: purchaseLoads.loadNumber,
+          supplierName: suppliers.name,
+          receivingDate: stockBatches.receivingDate,
+          receivedPieces: stockBatches.receivedPieces,
+          deadPieces: stockBatches.deadPieces,
+          damagedPieces: stockBatches.damagedPieces,
+          originalSaleablePieces: stockBatches.originalSaleablePieces,
+          soldPieces: stockBatches.soldPieces,
+          remainingPieces: stockBatches.remainingPieces,
+          purchaseAmount: stockBatches.purchaseAmount,
+          totalLoadExpenses: stockBatches.totalLoadExpenses,
+          totalLandedCost: stockBatches.totalLandedCost,
+          costPerPiece: stockBatches.costPerPiece,
+          isClosed: stockBatches.isClosed,
+          notes: stockBatches.notes,
+          createdAt: stockBatches.createdAt,
+        })
+        .from(stockBatches)
+        .innerJoin(purchaseLoads, eq(stockBatches.purchaseLoadId, purchaseLoads.id))
+        .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
+        .orderBy(asc(stockBatches.receivingDate), asc(stockBatches.id)),
+      db
+        .select({
+          id: stockMovements.id,
+          stockBatchId: stockMovements.stockBatchId,
+          batchNumber: stockBatches.batchNumber,
+          movementType: stockMovements.movementType,
+          quantity: stockMovements.quantity,
+          balanceAfter: stockMovements.balanceAfter,
+          unitCost: stockMovements.unitCost,
+          referenceType: stockMovements.referenceType,
+          referenceId: stockMovements.referenceId,
+          notes: stockMovements.notes,
+          createdAt: stockMovements.createdAt,
+        })
+        .from(stockMovements)
+        .innerJoin(stockBatches, eq(stockMovements.stockBatchId, stockBatches.id))
+        .orderBy(desc(stockMovements.createdAt), desc(stockMovements.id))
+        .limit(200),
+      db
+        .select({
+          id: sales.id,
+          invoiceNumber: sales.invoiceNumber,
+          saleType: sales.saleType,
+          saleDate: sales.saleDate,
+          shopId: sales.shopId,
+          shopName: shops.shopName,
+          totalPieces: sales.totalPieces,
+          totalAmount: sales.totalAmount,
+          totalCost: sales.totalCost,
+          totalProfit: sales.totalProfit,
+          sellingPricePerPiece: sales.sellingPricePerPiece,
+          costPerPiece: sales.costPerPiece,
+          profitPerPiece: sales.profitPerPiece,
+          notes: sales.notes,
+          createdAt: sales.createdAt,
+        })
+        .from(sales)
+        .leftJoin(shops, eq(sales.shopId, shops.id))
+        .orderBy(desc(sales.saleDate), desc(sales.id)),
+      db.select().from(shops).orderBy(asc(shops.shopName)),
+      db
+        .select({
+          id: dealerTransactions.id,
+          supplierId: dealerTransactions.supplierId,
+          supplierName: suppliers.name,
+          transactionDate: dealerTransactions.transactionDate,
+          transactionType: dealerTransactions.transactionType,
+          debitAmount: dealerTransactions.debitAmount,
+          creditAmount: dealerTransactions.creditAmount,
+          balanceAfter: dealerTransactions.balanceAfter,
+          referenceType: dealerTransactions.referenceType,
+          referenceId: dealerTransactions.referenceId,
+          paymentMethod: dealerTransactions.paymentMethod,
+          notes: dealerTransactions.notes,
+          createdAt: dealerTransactions.createdAt,
+        })
+        .from(dealerTransactions)
+        .innerJoin(suppliers, eq(dealerTransactions.supplierId, suppliers.id))
+        .orderBy(desc(dealerTransactions.id)),
+      db.select().from(workers).orderBy(asc(workers.name)),
+      db
+        .select({
+          id: workerPayments.id,
+          workerId: workerPayments.workerId,
+          workerName: workers.name,
+          amount: workerPayments.amount,
+          paymentDate: workerPayments.paymentDate,
+          paymentMethod: workerPayments.paymentMethod,
+          description: workerPayments.description,
+          createdAt: workerPayments.createdAt,
+        })
+        .from(workerPayments)
+        .innerJoin(workers, eq(workerPayments.workerId, workers.id))
+        .orderBy(desc(workerPayments.paymentDate), desc(workerPayments.id)),
+      db
+        .select()
+        .from(businessExpenses)
+        .orderBy(desc(businessExpenses.expenseDate), desc(businessExpenses.id)),
+      db.select().from(vehicles).orderBy(asc(vehicles.vehicleNumber)),
+      db.select().from(settings),
+    ]);
+
+    const allLoadExps = await db.select().from(loadExpenses).orderBy(desc(loadExpenses.id));
+
+    // Enrich suppliers
+    const enrichedSuppliers = allSuppliers.map((sup) => {
+      const supTxs = allDealerTx.filter((t) => t.supplierId === sup.id);
+      const currentBalance =
+        supTxs.length > 0 ? Number(supTxs[0].balanceAfter) : Number(sup.openingBalance);
+      const supLoads = allLoads.filter((l) => l.supplierId === sup.id);
+      return {
+        ...sup,
+        currentBalance,
+        totalPurchasesAmount: supLoads.reduce((s, l) => s + Number(l.purchaseAmount), 0),
+        purchaseCount: supLoads.length,
+      };
+    });
+
+    // Enrich purchases
+    const enrichedPurchases = allLoads.map((load) => {
+      const exps = allLoadExps.filter((e) => e.purchaseLoadId === load.id);
+      const totalExp = exps.reduce((s, e) => s + Number(e.amount), 0);
+      const batch = allBatches.find((b) => b.purchaseLoadId === load.id) || null;
+      return {
+        ...load,
+        expenses: exps,
+        purchaseRatePerKg: calculatePurchaseRate(
+          Number(load.purchaseAmount),
+          Number(load.totalWeightKg)
+        ),
+        totalExpenses: totalExp,
+        totalLandedCost: calculateLandedCost(Number(load.purchaseAmount), totalExp),
+        stockBatch: batch,
+      };
+    });
+
+    // Enrich shops
+    const enrichedShops = allShops.map((sh) => {
+      const shopSales = allSales.filter((s) => s.shopId === sh.id);
+      return {
+        ...sh,
+        totalPiecesDelivered: shopSales.reduce((s, x) => s + x.totalPieces, 0),
+        totalSalesAmount: shopSales.reduce((s, x) => s + Number(x.totalAmount), 0),
+        ordersCount: shopSales.length,
+      };
+    });
+
+    // Enrich workers
+    const enrichedWorkers = allWorkers.map((w) => {
+      const wPmts = allWorkerPayments.filter((p) => p.workerId === w.id);
+      return {
+        ...w,
+        totalPaid: wPmts.reduce((s, p) => s + Number(p.amount), 0),
+        paymentCount: wPmts.length,
+      };
+    });
+
+    const config: Record<string, string> = {
+      businessName: 'Al-Madina Poultry Traders',
+      businessLocation: 'Lahore Road, Punjab, Pakistan',
+      examplePrice1: '1200',
+      examplePrice2: '1500',
+      lowStockThreshold: '300',
+    };
+    allSettings.forEach((s) => {
+      config[s.key] = s.value;
+    });
+
+    res.json({
+      suppliers: enrichedSuppliers,
+      purchases: enrichedPurchases,
+      batches: allBatches,
+      movements: allMovements,
+      sales: allSales,
+      shops: enrichedShops,
+      dealerTransactions: allDealerTx,
+      workers: enrichedWorkers,
+      workerPayments: allWorkerPayments,
+      expenses: allExpenses,
+      vehicles: allVehicles,
+      settings: config,
+    });
+  } catch (error: any) {
+    console.error('Bootstrap failed:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -218,6 +218,11 @@ export interface DashboardData {
   };
 }
 
+export interface LoadExpenseDetail extends LoadExpense {
+  loadNumber?: string;
+  supplierName?: string;
+}
+
 export interface ReportData {
   startDate: string;
   endDate: string;
@@ -242,6 +247,28 @@ export interface ReportData {
   generalExpenses: BusinessExpense[];
   workerPayments: WorkerPayment[];
   purchases: PurchaseLoad[];
+  loadExpenses?: LoadExpenseDetail[];
+  dealerPayments?: DealerTransaction[];
+  stockValuation?: {
+    totalPieces: number;
+    totalValue: number;
+    activeBatchesCount: number;
+  };
+}
+
+export interface BootstrapData {
+  suppliers: Supplier[];
+  purchases: PurchaseLoad[];
+  batches: StockBatch[];
+  movements: StockMovement[];
+  sales: Sale[];
+  shops: Shop[];
+  dealerTransactions: DealerTransaction[];
+  workers: Worker[];
+  workerPayments: WorkerPayment[];
+  expenses: BusinessExpense[];
+  vehicles: Vehicle[];
+  settings: AppSettings;
 }
 
 export interface AppSettings {

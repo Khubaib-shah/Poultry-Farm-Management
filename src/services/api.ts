@@ -14,6 +14,7 @@ import {
   DashboardData,
   ReportData,
   AppSettings,
+  BootstrapData,
 } from '../types/index.ts';
 
 async function handleResponse<T>(res: Response): Promise<T> {
@@ -31,6 +32,9 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const api = {
+  // Unified Bootstrap
+  getBootstrap: () => fetch('/api/bootstrap').then((r) => handleResponse<BootstrapData>(r)),
+
   // Settings
   getSettings: () => fetch('/api/settings').then((r) => handleResponse<AppSettings>(r)),
   updateSettings: (data: Partial<AppSettings>) =>
@@ -224,6 +228,8 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then((r) => handleResponse<Worker>(r)),
+  getAllWorkerPayments: () =>
+    fetch('/api/worker-payments').then((r) => handleResponse<WorkerPayment[]>(r)),
   getWorkerPayments: (workerId: number) =>
     fetch(`/api/workers/${workerId}/payments`).then((r) => handleResponse<WorkerPayment[]>(r)),
   recordWorkerPayment: (
@@ -265,6 +271,10 @@ export const api = {
     }).then((r) => handleResponse<Vehicle>(r)),
 
   // Seed sample data
-  seedData: () =>
-    fetch('/api/seed', { method: 'POST' }).then((r) => handleResponse<{ message: string }>(r)),
+  seedData: (force = false) =>
+    fetch('/api/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force }),
+    }).then((r) => handleResponse<{ message: string; seeded?: boolean }>(r)),
 };

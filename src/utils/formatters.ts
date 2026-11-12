@@ -5,10 +5,21 @@
 export function formatPKR(val: number | string | null | undefined): string {
   if (val === null || val === undefined || isNaN(Number(val))) return 'PKR 0';
   const num = Number(val);
-  return 'PKR ' + num.toLocaleString('en-PK', {
+  const absFormatted = Math.abs(num).toLocaleString('en-PK', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
+  return num < 0 ? `-PKR ${absFormatted}` : `PKR ${absFormatted}`;
+}
+
+export function formatSignedPKR(val: number | string | null | undefined): string {
+  const num = Number(val ?? 0);
+  if (isNaN(num) || num === 0) return 'PKR 0';
+  const absFormatted = Math.abs(num).toLocaleString('en-PK', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+  return num > 0 ? `+PKR ${absFormatted}` : `-PKR ${absFormatted}`;
 }
 
 export function formatNumber(val: number | string | null | undefined): string {

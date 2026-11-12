@@ -47,6 +47,11 @@
     background-color: var(--color-canvas);
     transition: background-color 0.2s ease, color 0.2s ease;
   }
+
+  button:focus,
+  button:focus-visible {
+    outline: none;
+  }
 }
 
 /* Custom scrollbar for tables and drawers */

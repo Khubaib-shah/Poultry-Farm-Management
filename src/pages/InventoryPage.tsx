@@ -1,106 +1,102 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Boxes,
   Calculator,
   History,
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
-  Search,
-  CheckCircle2,
-  DollarSign,
-  Plus,
-  Sliders,
   Scale,
+  Check,
 } from 'lucide-react';
-import { StockBatch, StockMovement, AppSettings } from '../types/index.ts';
-import { api } from '../services/api.ts';
+import { StockBatch, StockMovement } from '../types/index.ts';
 import { Modal } from '../components/common/Modal.tsx';
+import { Select } from '../components/common/Select.tsx';
+import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { formatPKR, formatNumber, formatDate, formatDateTime } from '../utils/formatters.ts';
 import { getCostAnalysisStatus } from '../utils/poultryMath.ts';
+import { useAppStore } from '../store/useAppStore.ts';
 
 interface InventoryPageProps {
-  onShowToast: (text: string, type: 'success' | 'error') => void;
+  onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
 }
 
 export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => {
-  const [batches, setBatches] = useState<StockBatch[]>([]);
-  const [movements, setMovements] = useState<StockMovement[]>([]);
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const batches = useAppStore((s) => s.batches);
+  const movements = useAppStore((s) => s.movements);
+  const settings = useAppStore((s) => s.settings);
+  const loading = useAppStore((s) => s.loading);
+  const initialized = useAppStore((s) => s.initialized);
+  const adjustStock = useAppStore((s) => s.adjustStock);
+
   const [activeTab, setActiveTab] = useState<'batches' | 'calculator' | 'movements'>('batches');
   const [searchQuery, setSearchQuery] = useState('');
+  const [batchStatusFilter, setBatchStatusFilter] = useState('ALL');
+  const [movementTypeFilter, setMovementTypeFilter] = useState('ALL');
 
-  // Cost calculator active batch
-  const [selectedBatch, setSelectedBatch] = useState<StockBatch | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>('');
   const [proposedPrice, setProposedPrice] = useState<string>('1850');
 
-  // Manual stock adjustment modal
+  // Stock adjustment modal
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [adjustBatchId, setAdjustBatchId] = useState<string>('');
   const [quantityChange, setQuantityChange] = useState<string>('-5');
   const [adjustReason, setAdjustReason] = useState<string>('');
-  const [adjustSubmitting, setAdjustSubmitting] = useState(false);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [batchesRes, movementsRes, settingsRes] = await Promise.all([
-        api.getBatches(),
-        api.getMovements(),
-        api.getSettings(),
-      ]);
-      setBatches(batchesRes);
-      setMovements(movementsRes);
-      setSettings(settingsRes);
-      if (batchesRes.length > 0 && !selectedBatch) {
-        setSelectedBatch(batchesRes[0]);
-      }
-    } catch (err: any) {
-      onShowToast(err.message || 'Failed to load inventory data', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (batches.length > 0 && !selectedBatchId) {
+      const firstActive = batches.find((b) => !b.isClosed) || batches[0];
+      setSelectedBatchId(String(firstActive.id));
+    }
+  }, [batches, selectedBatchId]);
+
+  const selectedBatch = useMemo(
+    () => batches.find((b) => String(b.id) === selectedBatchId) || batches[0] || null,
+    [batches, selectedBatchId]
+  );
 
   const handleStockAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adjustBatchId || !quantityChange || parseInt(quantityChange, 10) === 0) {
-      onShowToast('Please provide a valid stock batch and non-zero adjustment quantity', 'error');
+    const qty = parseInt(quantityChange, 10);
+    if (!adjustBatchId || isNaN(qty) || qty === 0) {
+      onShowToast('Please pick a stock lot and enter a valid count change', 'error');
       return;
     }
 
+    setIsAdjustOpen(false);
+    const reason = adjustReason || 'Manual stock count update';
+    setQuantityChange('-5');
+    setAdjustReason('');
+
     try {
-      setAdjustSubmitting(true);
-      await api.adjustStock({
+      await adjustStock({
         stockBatchId: parseInt(adjustBatchId, 10),
-        quantityChange: parseInt(quantityChange, 10),
-        reason: adjustReason || 'Physical stock audit adjustment',
-        adjustmentType: parseInt(quantityChange, 10) < 0 ? 'DAMAGE' : 'ADJUSTMENT',
+        quantityChange: qty,
+        reason,
+        adjustmentType: qty < 0 ? 'DAMAGE' : 'ADJUSTMENT',
       });
-      onShowToast('Stock count adjusted successfully and recorded in ledger', 'success');
-      setIsAdjustOpen(false);
-      setQuantityChange('-5');
-      setAdjustReason('');
-      await fetchData();
-    } catch (err: any) {
-      onShowToast(err.message || 'Stock adjustment failed', 'error');
-    } finally {
-      setAdjustSubmitting(false);
+    } catch {
+      // handled by store
     }
   };
 
-  // Filter batches
-  const filteredBatches = batches.filter((b) => {
-    return (
-      b.batchNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (b.supplierName && b.supplierName.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredBatches = useMemo(() => {
+    return batches.filter((b) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        b.batchNumber.toLowerCase().includes(q) ||
+        (b.supplierName && b.supplierName.toLowerCase().includes(q));
+      const matchesStatus =
+        batchStatusFilter === 'ALL' ||
+        (batchStatusFilter === 'ACTIVE' && !b.isClosed) ||
+        (batchStatusFilter === 'DEPLETED' && b.isClosed);
+      return matchesSearch && matchesStatus;
+    });
+  }, [batches, searchQuery, batchStatusFilter]);
+
+  const filteredMovements = useMemo(() => {
+    return movements.filter(
+      (m) => movementTypeFilter === 'ALL' || m.movementType === movementTypeFilter
     );
-  });
+  }, [movements, movementTypeFilter]);
 
   const totalStockPieces = batches
     .filter((b) => !b.isClosed)
@@ -110,9 +106,9 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
     .filter((b) => !b.isClosed)
     .reduce((sum, b) => sum + b.remainingPieces * Number(b.costPerPiece), 0);
 
-  // Example selling prices from settings
-  const examplePrice1 = Number(settings?.examplePrice1 || 1200);
-  const examplePrice2 = Number(settings?.examplePrice2 || 1500);
+  const lowThreshold = Number(settings.lowStockThreshold || 300);
+  const examplePrice1 = Number(settings.examplePrice1 || 1200);
+  const examplePrice2 = Number(settings.examplePrice2 || 1500);
 
   const calcCost = selectedBatch ? Number(selectedBatch.costPerPiece) : 0;
   const calcSellingPrice = parseFloat(proposedPrice) || 0;
@@ -120,289 +116,434 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
   const analysisEx1 = getCostAnalysisStatus(examplePrice1, calcCost);
   const analysisEx2 = getCostAnalysisStatus(examplePrice2, calcCost);
 
+  const batchColumns: DataTableColumn<StockBatch>[] = [
+    {
+      key: 'batchNumber',
+      header: 'Lot #',
+      sortable: true,
+      alwaysVisible: true,
+      hideOnMobileDefault: true,
+      render: (b) => <span className="font-mono font-bold">{b.batchNumber}</span>,
+    },
+    {
+      key: 'receivingDate',
+      header: 'Arrival Date',
+      sortable: true,
+      hideOnMobileDefault: true,
+      render: (b) => (
+        <span className="text-[#4A515B] dark:text-[#A3AAB3]">{formatDate(b.receivingDate)}</span>
+      ),
+    },
+    {
+      key: 'supplierName',
+      header: 'Supplier',
+      sortable: true,
+      hideOnMobileDefault: true,
+      render: (b) => (
+        <div>
+          <div className="font-semibold">{b.supplierName}</div>
+          <div className="text-[10px] text-[#636B76] font-mono">{b.loadNumber}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'receivedPieces',
+      header: 'Arrived / Dead',
+      align: 'right',
+      defaultVisible: false,
+      sortable: true,
+      sortValue: (b) => b.receivedPieces,
+      render: (b) => (
+        <span className="font-mono">
+          {b.receivedPieces} / <span className="text-rose-500">{b.deadPieces}</span> /{' '}
+          <span className="text-amber-500">{b.damagedPieces}</span>
+        </span>
+      ),
+    },
+    {
+      key: 'originalSaleablePieces',
+      header: 'Healthy Total',
+      align: 'right',
+      defaultVisible: false,
+      sortable: true,
+      render: (b) => <span className="font-mono">{formatNumber(b.originalSaleablePieces)}</span>,
+    },
+    {
+      key: 'soldPieces',
+      header: 'Sold',
+      align: 'right',
+      sortable: true,
+      render: (b) => <span className="font-mono">{formatNumber(b.soldPieces)}</span>,
+    },
+    {
+      key: 'remainingPieces',
+      header: 'Birds Left',
+      align: 'right',
+      sortable: true,
+      alwaysVisible: true,
+      hideOnMobileDefault: true,
+      render: (b) => (
+        <span className="font-mono font-black text-[#14161A] dark:text-white">
+          {formatNumber(b.remainingPieces)}
+        </span>
+      ),
+    },
+    {
+      key: 'costPerPiece',
+      header: 'Cost / Bird',
+      align: 'right',
+      sortable: true,
+      sortValue: (b) => Number(b.costPerPiece),
+      render: (b) => (
+        <span className="font-mono font-bold text-[#2FB67C]">{formatPKR(b.costPerPiece)}</span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      align: 'center',
+      sortable: true,
+      sortValue: (b) => (b.isClosed ? 0 : b.remainingPieces),
+      render: (b) => (
+        <span
+          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+            b.isClosed
+              ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#636B76]'
+              : b.remainingPieces <= lowThreshold
+              ? 'bg-[#F6E7A1]/40 text-amber-900 dark:text-[#F6E7A1]'
+              : 'bg-[#92E2B3]/25 text-emerald-800 dark:text-[#92E2B3]'
+          }`}
+        >
+          {b.isClosed ? 'Finished' : b.remainingPieces <= lowThreshold ? 'Low Stock' : 'Selling Now'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Check Rate',
+      align: 'right',
+      render: (b) => (
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedBatchId(String(b.id));
+            setActiveTab('calculator');
+          }}
+          className="px-3 py-1.5 text-[11px] font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer"
+        >
+          Check Profit
+        </button>
+      ),
+    },
+  ];
+
+  const movementColumns: DataTableColumn<StockMovement>[] = [
+    {
+      key: 'createdAt',
+      header: 'Date & Time',
+      sortable: true,
+      hideOnMobileDefault: true,
+      render: (m) => <span className="font-mono text-[11px]">{formatDateTime(m.createdAt)}</span>,
+    },
+    {
+      key: 'batchNumber',
+      header: 'Lot #',
+      sortable: true,
+      alwaysVisible: true,
+      hideOnMobileDefault: true,
+      render: (m) => <span className="font-mono font-bold">{m.batchNumber}</span>,
+    },
+    {
+      key: 'movementType',
+      header: 'Action',
+      sortable: true,
+      render: (m) => (
+        <span
+          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            m.movementType === 'STOCK_IN'
+              ? 'bg-[#92E2B3]/30 text-emerald-800 dark:text-[#92E2B3]'
+              : m.movementType === 'SALE_OUT'
+              ? 'bg-[#A9C8FA]/40 text-blue-900 dark:text-[#A9C8FA]'
+              : m.movementType === 'WHOLESALE_OUT'
+              ? 'bg-[#C9C3F5]/40 text-purple-900 dark:text-[#C9C3F5]'
+              : 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
+          }`}
+        >
+          {m.movementType === 'STOCK_IN'
+            ? 'Truck Arrival'
+            : m.movementType === 'SALE_OUT'
+            ? 'Walk-in Shop'
+            : m.movementType === 'WHOLESALE_OUT'
+            ? 'Other Shop'
+            : 'Count Fix'}
+        </span>
+      ),
+    },
+    {
+      key: 'quantity',
+      header: 'Birds',
+      align: 'right',
+      sortable: true,
+      alwaysVisible: true,
+      hideOnMobileDefault: true,
+      render: (m) => (
+        <span className={`font-mono font-bold ${m.quantity > 0 ? 'text-[#2FB67C]' : 'text-rose-500'}`}>
+          {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+        </span>
+      ),
+    },
+    {
+      key: 'balanceAfter',
+      header: 'Left in Lot',
+      align: 'right',
+      sortable: true,
+      render: (m) => <span className="font-mono font-semibold">{m.balanceAfter} birds</span>,
+    },
+    {
+      key: 'unitCost',
+      header: 'Cost / Bird',
+      align: 'right',
+      defaultVisible: false,
+      sortable: true,
+      sortValue: (m) => Number(m.unitCost),
+      render: (m) => <span className="font-mono">{formatPKR(m.unitCost)}</span>,
+    },
+    {
+      key: 'notes',
+      header: 'Details',
+      defaultVisible: false,
+      render: (m) => (
+        <span className="text-[#636B76] dark:text-[#8A929C] truncate max-w-[240px] block">
+          {m.notes || m.referenceType || '-'}
+        </span>
+      ),
+    },
+  ];
+
+  const batchOptions = batches.map((b) => ({
+    value: String(b.id),
+    label: b.batchNumber,
+    sublabel: `${b.remainingPieces} left @ ${formatPKR(b.costPerPiece)}/bird`,
+  }));
+
+  const activeBatchOptions = batches
+    .filter((b) => !b.isClosed)
+    .map((b) => ({
+      value: String(b.id),
+      label: b.batchNumber,
+      sublabel: `${b.remainingPieces} birds available`,
+    }));
+
+  const inputCls =
+    'w-full min-h-[42px] px-3.5 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
+
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto">
-      {/* Top summary row - Pastel Island Trio */}
+    <div className="w-full space-y-4 sm:space-y-6">
+      {/* Top KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Card 1: Pastel Sky */}
-        <div className="rounded-[20px] p-5 bg-[#A9C8FA] text-[#14161A] border border-black/5 shadow-xs flex flex-col justify-between h-[150px] transition-transform hover:-translate-y-0.5">
+        <div className="rounded-[20px] p-5 bg-[#A9C8FA] text-[#14161A] border border-black/5 shadow-xs flex flex-col justify-between min-h-[145px]">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold tracking-[0.08em] uppercase text-[#14161A]/80">
-              Total Available Inventory
+              Birds in Stock
             </span>
-            <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center text-[#14161A] shadow-xs">
+            <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center">
               <Boxes className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <div className="text-[26px] sm:text-[28px] font-black tracking-tight leading-none font-mono">
-              {formatNumber(totalStockPieces)} pcs
+            <div className="text-[26px] font-black tracking-tight leading-none font-mono">
+              {formatNumber(totalStockPieces)} birds
             </div>
             <p className="text-xs font-semibold text-[#14161A]/85 mt-2">
-              Across {batches.filter((b) => !b.isClosed).length} active FIFO batches
+              In {batches.filter((b) => !b.isClosed).length} active lots (oldest sold first)
             </p>
           </div>
         </div>
 
-        {/* Card 2: Pastel Mint */}
-        <div className="rounded-[20px] p-5 bg-[#92E2B3] text-[#14161A] border border-black/5 shadow-xs flex flex-col justify-between h-[150px] transition-transform hover:-translate-y-0.5">
+        <div className="rounded-[20px] p-5 bg-[#92E2B3] text-[#14161A] border border-black/5 shadow-xs flex flex-col justify-between min-h-[145px]">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold tracking-[0.08em] uppercase text-[#14161A]/80">
-              Total Landed Value
+              Total Stock Worth
             </span>
-            <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center text-[#14161A] shadow-xs">
+            <div className="w-8 h-8 rounded-full bg-white/70 flex items-center justify-center">
               <Scale className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <div className="text-[26px] sm:text-[28px] font-black tracking-tight leading-none font-mono">
+            <div className="text-[26px] font-black tracking-tight leading-none font-mono">
               {formatPKR(totalStockValue)}
             </div>
             <p className="text-xs font-semibold text-[#14161A]/85 mt-2">
-              Valued at true batch landed cost per piece
+              Purchase + truck cost of remaining birds
             </p>
           </div>
         </div>
 
-        {/* Card 3: Floating Island Operations */}
-        <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-5 shadow-xs flex flex-col justify-between h-[150px]">
+        <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-5 shadow-xs flex flex-col justify-between min-h-[145px]">
           <div>
             <span className="text-[11px] font-extrabold text-[#636B76] dark:text-[#8A929C] uppercase tracking-[0.08em]">
-              Stock Operations
+              Manual Count Fix
             </span>
             <div className="text-xs font-semibold text-[#14161A] dark:text-[#F2F4F5] mt-1">
-              Adjust stock counts or audit FIFO history
+              Update bird counts for dead birds or cage recount
             </div>
           </div>
           <button
+            type="button"
             onClick={() => {
-              if (batches.length > 0) {
-                setAdjustBatchId(String(batches[0].id));
-              }
+              const firstActive = batches.find((b) => !b.isClosed);
+              if (firstActive) setAdjustBatchId(String(firstActive.id));
               setIsAdjustOpen(true);
             }}
-            className="w-full inline-flex items-center justify-center px-4 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs"
+            className="w-full min-h-[42px] inline-flex items-center justify-center px-4 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs cursor-pointer"
           >
-            Adjust Stock Counts
+            Update Bird Count
           </button>
         </div>
       </div>
 
-      {/* Floating Pill Tabs Navigation */}
-      <div className="flex flex-wrap items-center gap-2 bg-white dark:bg-[#181B1F] p-1.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] w-fit shadow-xs">
+      {/* Sub-navigation: Vertical list on mobile, pill bar on sm+ */}
+      <div className="sm:hidden bg-white dark:bg-[#181B1F] rounded-[18px] border border-[#E3E6E8] dark:border-[#2A2F35] divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] overflow-hidden shadow-xs">
+        {[
+          { id: 'batches' as const, label: 'Stock Lots', icon: Boxes },
+          { id: 'calculator' as const, label: 'Price & Profit Checker', icon: Calculator },
+          { id: 'movements' as const, label: 'Stock History', icon: History },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`w-full px-4 py-3 text-xs flex items-center justify-between transition cursor-pointer ${
+                active
+                  ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5] font-bold'
+                  : 'text-[#4A515B] dark:text-[#A3AAB3] font-medium'
+              }`}
+            >
+              <span className="flex items-center gap-2.5">
+                <Icon className="w-4 h-4" />
+                <span>{tab.label}</span>
+              </span>
+              {active && <Check className="w-3.5 h-3.5 text-[#14161A] dark:text-[#D4F56B]" />}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="hidden sm:inline-flex items-center gap-0.5 bg-white dark:bg-[#181B1F] p-1 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] w-fit shadow-xs">
         <button
+          type="button"
           onClick={() => setActiveTab('batches')}
-          className={`px-4 py-2 text-xs font-bold rounded-full transition flex items-center space-x-2 ${
+          className={`px-4 py-2 text-xs font-bold rounded-full transition focus:outline-none flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'batches'
-              ? 'bg-[#14161A] text-[#D4F56B] dark:bg-[#D4F56B] dark:text-[#14161A]'
+              ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
               : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
           }`}
         >
           <Boxes className="w-3.5 h-3.5" />
-          <span>Active Batches & Landed Costs</span>
+          <span>Stock Lots</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('calculator')}
-          className={`px-4 py-2 text-xs font-bold rounded-full transition flex items-center space-x-2 ${
+          className={`px-4 py-2 text-xs font-bold rounded-full transition focus:outline-none flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'calculator'
-              ? 'bg-[#14161A] text-[#D4F56B] dark:bg-[#D4F56B] dark:text-[#14161A]'
+              ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
               : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
           }`}
         >
           <Calculator className="w-3.5 h-3.5" />
-          <span>Cost Analysis Calculator</span>
+          <span>Price & Profit Checker</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('movements')}
-          className={`px-4 py-2 text-xs font-bold rounded-full transition flex items-center space-x-2 ${
+          className={`px-4 py-2 text-xs font-bold rounded-full transition focus:outline-none flex items-center gap-2 cursor-pointer whitespace-nowrap ${
             activeTab === 'movements'
-              ? 'bg-[#14161A] text-[#D4F56B] dark:bg-[#D4F56B] dark:text-[#14161A]'
+              ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
               : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
           }`}
         >
           <History className="w-3.5 h-3.5" />
-          <span>Stock Movement Ledger</span>
+          <span>Stock History</span>
         </button>
       </div>
 
-      {/* TAB 1: BATCHES TABLE */}
+      {/* TAB 1: BATCHES */}
       {activeTab === 'batches' && (
-        <div className="space-y-4">
-          <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#636B76] dark:text-[#8A929C]" />
-              <input
-                type="text"
-                placeholder="Search batch # or supplier..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-full bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50 text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]"
-              />
-            </div>
-            <span className="text-xs text-[#636B76] dark:text-[#8A929C]">
-              Batches are consumed sequentially by oldest arrival date (FIFO)
+        <DataTable
+          tableId="inventory-batches"
+          data={filteredBatches}
+          columns={batchColumns}
+          keyExtractor={(b) => b.id}
+          loading={loading && !initialized}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search lot # or supplier..."
+          emptyMessage="No stock lots available yet."
+          defaultSortKey="receivingDate"
+          defaultSortDir="asc"
+          filters={[
+            {
+              key: 'status',
+              label: 'Status',
+              value: batchStatusFilter,
+              onChange: setBatchStatusFilter,
+              options: [
+                { value: 'ALL', label: 'All Lots' },
+                { value: 'ACTIVE', label: 'In Stock Now' },
+                { value: 'DEPLETED', label: 'Finished' },
+              ],
+            },
+          ]}
+          mobileCardTitle={(b) => b.batchNumber}
+          mobileCardSubtitle={(b) => `${b.supplierName || ''} · ${formatDate(b.receivingDate)}`}
+          mobileCardBadge={(b) => (
+            <span className="font-mono font-black text-xs text-[#2FB67C]">
+              {b.remainingPieces} left
             </span>
-          </div>
-
-          <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] overflow-hidden shadow-xs">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] text-[#4A515B] dark:text-[#A3AAB3] font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-2.5 px-3">Batch Number</th>
-                  <th className="py-2.5 px-3">Receiving Date</th>
-                  <th className="py-2.5 px-3">Supplier Load</th>
-                  <th className="py-2.5 px-3 text-right">Received / Dead / Dmg</th>
-                  <th className="py-2.5 px-3 text-right">Original Saleable</th>
-                  <th className="py-2.5 px-3 text-right">Sold Pieces</th>
-                  <th className="py-2.5 px-3 text-right font-bold text-[#14161A] dark:text-[#F2F4F5]">Remaining Pieces</th>
-                  <th className="py-2.5 px-3 text-right font-bold text-[#14161A] dark:text-[#D4F56B]">Cost / Piece</th>
-                  <th className="py-2.5 px-3 text-center">Status</th>
-                  <th className="py-2.5 px-3 text-right">Analyze</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
-                {loading ? (
-                  <tr>
-                    <td colSpan={10} className="py-8 text-center text-slate-400">
-                      Loading stock batches...
-                    </td>
-                  </tr>
-                ) : filteredBatches.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="py-8 text-center text-slate-400">
-                      No stock batches available.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredBatches.map((batch) => (
-                    <tr
-                      key={batch.id}
-                      className={`hover:bg-slate-50/80 transition ${
-                        batch.isClosed ? 'opacity-60 bg-slate-50/40' : ''
-                      }`}
-                    >
-                      <td className="py-2.5 px-3 font-semibold font-mono text-slate-900">
-                        {batch.batchNumber}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-600">{formatDate(batch.receivingDate)}</td>
-                      <td className="py-2.5 px-3">
-                        <div className="font-medium text-slate-800">{batch.supplierName}</div>
-                        <div className="text-[10px] text-slate-500 font-mono">{batch.loadNumber}</div>
-                      </td>
-                      <td className="py-2.5 px-3 text-right text-slate-600 font-mono">
-                        {batch.receivedPieces} /{' '}
-                        <span className="text-rose-600">{batch.deadPieces}</span> /{' '}
-                        <span className="text-amber-600">{batch.damagedPieces}</span>
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-800">
-                        {formatNumber(batch.originalSaleablePieces)}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-600">
-                        {formatNumber(batch.soldPieces)}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
-                        {formatNumber(batch.remainingPieces)}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
-                        {formatPKR(batch.costPerPiece)}
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
-                            batch.isClosed
-                              ? 'bg-slate-100 text-slate-600'
-                              : batch.remainingPieces <= 50
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          }`}
-                        >
-                          {batch.isClosed
-                            ? 'Depleted'
-                            : batch.remainingPieces <= 50
-                            ? 'Low Stock'
-                            : 'Active FIFO'}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <button
-                          onClick={() => {
-                            setSelectedBatch(batch);
-                            setActiveTab('calculator');
-                          }}
-                          className="px-2 py-1 text-[11px] font-medium rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                        >
-                          Calculate Margin
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+          )}
+        />
       )}
 
-      {/* TAB 2: SELLING PRICE & MARGIN CALCULATOR */}
+      {/* TAB 2: MARGIN CALCULATOR */}
       {activeTab === 'calculator' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: Batch Selector & Cost Breakdown */}
           <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-6 space-y-4 shadow-xs">
-            <h3 className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider">
-              1. Select Batch for Cost Analysis
-            </h3>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#4A515B] dark:text-[#A3AAB3] mb-1">
-                Choose Batch
-              </label>
-              <select
-                value={selectedBatch?.id || ''}
-                onChange={(e) => {
-                  const b = batches.find((item) => item.id === parseInt(e.target.value, 10));
-                  if (b) setSelectedBatch(b);
-                }}
-                className="w-full px-3 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-full bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50 text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]"
-              >
-                {batches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.batchNumber} ({b.remainingPieces} pcs remaining @ PKR {b.costPerPiece}/pc)
-                  </option>
-                ))}
-              </select>
-            </div>
+            <h3 className="text-xs font-bold uppercase tracking-wider">1. Pick a Stock Lot</h3>
+            <Select
+              value={selectedBatchId}
+              onChange={setSelectedBatchId}
+              options={batchOptions}
+              placeholder="Choose stock lot"
+              searchable
+            />
 
             {selectedBatch && (
               <div className="bg-[#F8F9FA] dark:bg-[#20242A] p-4 rounded-[16px] border border-[#E3E6E8] dark:border-[#2A2F35] space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-[#636B76] dark:text-[#8A929C]">Purchase Amount:</span>
-                  <span className="font-mono font-medium text-[#14161A] dark:text-[#F2F4F5]">
-                    {formatPKR(selectedBatch.purchaseAmount)}
-                  </span>
+                  <span className="text-[#636B76] dark:text-[#8A929C]">Bird Bill:</span>
+                  <span className="font-mono font-medium">{formatPKR(selectedBatch.purchaseAmount)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#636B76] dark:text-[#8A929C]">Load Expenses:</span>
-                  <span className="font-mono font-medium text-[#14161A] dark:text-[#F2F4F5]">
-                    {formatPKR(selectedBatch.totalLoadExpenses)}
-                  </span>
+                  <span className="text-[#636B76] dark:text-[#8A929C]">Truck Costs:</span>
+                  <span className="font-mono font-medium">{formatPKR(selectedBatch.totalLoadExpenses)}</span>
                 </div>
-                <div className="flex justify-between border-t border-[#E3E6E8] dark:border-[#2A2F35] pt-1">
-                  <span className="font-semibold text-[#14161A] dark:text-[#F2F4F5]">Total Landed Cost:</span>
-                  <span className="font-mono font-bold text-[#14161A] dark:text-[#F2F4F5]">
-                    {formatPKR(selectedBatch.totalLandedCost)}
-                  </span>
+                <div className="flex justify-between border-t border-[#E3E6E8] dark:border-[#2A2F35] pt-2">
+                  <span className="font-semibold">Total Paid:</span>
+                  <span className="font-mono font-bold">{formatPKR(selectedBatch.totalLandedCost)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#636B76] dark:text-[#8A929C]">Saleable Pieces:</span>
-                  <span className="font-mono font-medium text-[#14161A] dark:text-[#F2F4F5]">
-                    {selectedBatch.originalSaleablePieces} pieces
-                  </span>
+                  <span className="text-[#636B76] dark:text-[#8A929C]">Healthy Birds:</span>
+                  <span className="font-mono font-medium">{selectedBatch.originalSaleablePieces} birds</span>
                 </div>
-                <div className="flex justify-between border-t border-[#E3E6E8] dark:border-[#2A2F35] pt-2 bg-[#92E2B3]/20 -mx-4 -mb-4 p-3.5 rounded-b-[16px]">
-                  <span className="font-bold text-emerald-950 dark:text-[#92E2B3]">Cost Per Piece:</span>
-                  <span className="font-mono font-black text-emerald-900 dark:text-[#92E2B3] text-sm">
+                <div className="flex justify-between border-t border-[#E3E6E8] dark:border-[#2A2F35] pt-2.5 bg-[#92E2B3]/20 -mx-4 -mb-4 p-4 rounded-b-[16px]">
+                  <span className="font-bold text-emerald-950 dark:text-[#92E2B3]">Cost Per Bird:</span>
+                  <span className="font-mono font-black text-emerald-800 dark:text-[#92E2B3] text-sm">
                     {formatPKR(selectedBatch.costPerPiece)}
                   </span>
                 </div>
@@ -410,15 +551,11 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
             )}
           </div>
 
-          {/* Center: Proposed Selling Price Calculator */}
           <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-6 space-y-4 shadow-xs">
-            <h3 className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider">
-              2. Proposed Selling Price Calculator
-            </h3>
-
+            <h3 className="text-xs font-bold uppercase tracking-wider">2. Test a Selling Price</h3>
             <div>
-              <label className="block text-xs font-semibold text-[#4A515B] dark:text-[#A3AAB3] mb-1">
-                Enter Proposed Selling Price Per Piece (PKR)
+              <label className="block text-xs font-semibold text-[#4A515B] dark:text-[#A3AAB3] mb-1.5">
+                Selling Price Per Bird (PKR)
               </label>
               <div className="relative">
                 <input
@@ -426,18 +563,12 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
                   step="1"
                   value={proposedPrice}
                   onChange={(e) => setProposedPrice(e.target.value)}
-                  className="w-full pl-4 pr-12 py-2 text-sm font-bold border border-[#E3E6E8] dark:border-[#2A2F35] rounded-full bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50 text-[#14161A] dark:text-[#F2F4F5] font-mono focus:outline-none focus:ring-2 focus:ring-[#D4F56B]"
+                  className={`${inputCls} text-sm font-bold font-mono pr-12`}
                 />
-                <span className="absolute right-4 top-2.5 text-xs text-[#636B76] dark:text-[#8A929C] font-bold">
-                  PKR
-                </span>
+                <span className="absolute right-4 top-3 text-xs text-[#636B76] font-bold">PKR</span>
               </div>
-              <p className="text-[10px] text-[#636B76] dark:text-[#8A929C] mt-1">
-                Planning calculator only. Actual sales prices are recorded per transaction.
-              </p>
             </div>
 
-            {/* Indicator Card */}
             <div
               className={`p-4 rounded-[16px] border text-center ${
                 analysis.status === 'PROFITABLE'
@@ -447,246 +578,162 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
                   : 'bg-rose-500/15 border-rose-500/30 text-rose-950 dark:text-rose-300'
               }`}
             >
-              <div className="text-[11px] font-bold uppercase tracking-wider mb-1">
-                Pricing Assessment
-              </div>
               <div className="text-lg font-black tracking-tight">
-                {analysis.status === 'PROFITABLE' && 'PROFITABLE SALE'}
-                {analysis.status === 'AT_COST' && 'AT BREAK-EVEN COST'}
-                {analysis.status === 'BELOW_COST' && 'BELOW COST (LOSS WARNING)'}
+                {analysis.status === 'PROFITABLE' && 'GOOD PROFIT'}
+                {analysis.status === 'AT_COST' && 'NO PROFIT'}
+                {analysis.status === 'BELOW_COST' && 'LOSS WARNING'}
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs border-t border-current/20 pt-3">
                 <div>
-                  <div className="text-[10px] opacity-75">Profit / Piece</div>
+                  <div className="text-[10px] opacity-75">Profit / Bird</div>
                   <div className="font-bold font-mono text-sm">
                     {formatPKR(analysis.profitPerPiece)}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] opacity-75">Profit Margin</div>
-                  <div className="font-bold font-mono text-sm">
-                    {analysis.marginPercent}%
-                  </div>
+                  <div className="text-[10px] opacity-75">Profit %</div>
+                  <div className="font-bold font-mono text-sm">{analysis.marginPercent}%</div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right: Configured Example Benchmarks */}
           <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-6 space-y-4 shadow-xs">
-            <h3 className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider">
-              3. Preset Price Benchmarks
-            </h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider">3. Quick Price Checks</h3>
             <p className="text-xs text-[#636B76] dark:text-[#8A929C]">
-              Configured example benchmark prices from Settings
+              Saved test prices from Settings
             </p>
 
-            {/* Benchmark 1 */}
-            <div className="p-3.5 rounded-[16px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#20242A]">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-[#14161A] dark:text-[#F2F4F5]">At {formatPKR(examplePrice1)} / pc:</span>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    analysisEx1.status === 'PROFITABLE'
-                      ? 'bg-[#92E2B3]/30 text-emerald-800 dark:text-[#92E2B3]'
-                      : 'bg-rose-500/20 text-rose-800 dark:text-rose-300'
-                  }`}
-                >
-                  {analysisEx1.status}
-                </span>
+            {[
+              { price: examplePrice1, res: analysisEx1 },
+              { price: examplePrice2, res: analysisEx2 },
+            ].map((item, idx) => (
+              <div
+                key={idx}
+                className="p-3.5 rounded-[16px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#20242A] space-y-1.5"
+              >
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold">At {formatPKR(item.price)} / bird:</span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      item.res.status === 'PROFITABLE'
+                        ? 'bg-[#92E2B3]/30 text-emerald-800 dark:text-[#92E2B3]'
+                        : 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
+                    }`}
+                  >
+                    {item.res.status === 'PROFITABLE' ? 'PROFIT' : 'LOSS'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs text-[#4A515B] dark:text-[#A3AAB3]">
+                  <span>Profit per bird:</span>
+                  <span className="font-mono font-bold text-[#14161A] dark:text-white">
+                    {formatPKR(item.res.profitPerPiece)} ({item.res.marginPercent}%)
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between text-xs mt-1.5 text-[#4A515B] dark:text-[#A3AAB3]">
-                <span>Profit per piece:</span>
-                <span className="font-mono font-bold text-[#14161A] dark:text-[#F2F4F5]">{formatPKR(analysisEx1.profitPerPiece)}</span>
-              </div>
-              <div className="flex justify-between text-xs text-[#4A515B] dark:text-[#A3AAB3]">
-                <span>Margin:</span>
-                <span className="font-mono font-bold text-[#14161A] dark:text-[#F2F4F5]">{analysisEx1.marginPercent}%</span>
-              </div>
-            </div>
-
-            {/* Benchmark 2 */}
-            <div className="p-3.5 rounded-[16px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#20242A]">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-[#14161A] dark:text-[#F2F4F5]">At {formatPKR(examplePrice2)} / pc:</span>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    analysisEx2.status === 'PROFITABLE'
-                      ? 'bg-[#92E2B3]/30 text-emerald-800 dark:text-[#92E2B3]'
-                      : 'bg-rose-500/20 text-rose-800 dark:text-rose-300'
-                  }`}
-                >
-                  {analysisEx2.status}
-                </span>
-              </div>
-              <div className="flex justify-between text-xs mt-1.5 text-[#4A515B] dark:text-[#A3AAB3]">
-                <span>Profit per piece:</span>
-                <span className="font-mono font-bold text-[#14161A] dark:text-[#F2F4F5]">{formatPKR(analysisEx2.profitPerPiece)}</span>
-              </div>
-              <div className="flex justify-between text-xs text-[#4A515B] dark:text-[#A3AAB3]">
-                <span>Margin:</span>
-                <span className="font-mono font-bold text-[#14161A] dark:text-[#F2F4F5]">{analysisEx2.marginPercent}%</span>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* TAB 3: STOCK MOVEMENTS LEDGER */}
+      {/* TAB 3: STOCK MOVEMENTS */}
       {activeTab === 'movements' && (
-        <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] overflow-hidden shadow-xs">
-          <div className="px-5 py-4 bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35]">
-            <h3 className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider">
-              Complete Stock Movement Ledger
-            </h3>
-            <p className="text-[11px] text-[#636B76] dark:text-[#8A929C] mt-0.5">
-              Every arrival, sale deduction, wholesale delivery, or adjustment is recorded here
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[11px]">
-                  <th className="py-2.5 px-3">Date & Time</th>
-                  <th className="py-2.5 px-3">Batch</th>
-                  <th className="py-2.5 px-3">Movement Type</th>
-                  <th className="py-2.5 px-3 text-right">Quantity</th>
-                  <th className="py-2.5 px-3 text-right">Balance After</th>
-                  <th className="py-2.5 px-3 text-right">Unit Cost</th>
-                  <th className="py-2.5 px-3">Reference / Notes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {movements.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-6 text-center text-slate-400">
-                      No stock movements recorded yet.
-                    </td>
-                  </tr>
-                ) : (
-                  movements.map((mov) => (
-                    <tr key={mov.id} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 text-slate-600 font-mono">
-                        {formatDateTime(mov.createdAt)}
-                      </td>
-                      <td className="py-2.5 px-3 font-semibold text-slate-800 font-mono">
-                        {mov.batchNumber}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span
-                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            mov.movementType === 'STOCK_IN'
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : mov.movementType === 'SALE_OUT'
-                              ? 'bg-blue-50 text-blue-700'
-                              : mov.movementType === 'WHOLESALE_OUT'
-                              ? 'bg-purple-50 text-purple-700'
-                              : 'bg-rose-50 text-rose-700'
-                          }`}
-                        >
-                          {mov.movementType}
-                        </span>
-                      </td>
-                      <td
-                        className={`py-2.5 px-3 text-right font-mono font-bold ${
-                          mov.quantity > 0 ? 'text-emerald-700' : 'text-rose-700'
-                        }`}
-                      >
-                        {mov.quantity > 0 ? `+${mov.quantity}` : mov.quantity}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-900 font-semibold">
-                        {mov.balanceAfter} pcs
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-600">
-                        {formatPKR(mov.unitCost)}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-600 truncate max-w-[200px]">
-                        {mov.notes || mov.referenceType || '-'}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          tableId="inventory-movements"
+          title="Stock History"
+          subtitle="Every truck arrival, walk-in sale, other shop delivery, and count fix"
+          data={filteredMovements}
+          columns={movementColumns}
+          keyExtractor={(m) => m.id}
+          searchPlaceholder="Search lot # or note..."
+          defaultSortKey="createdAt"
+          defaultSortDir="desc"
+          filters={[
+            {
+              key: 'type',
+              label: 'Action Type',
+              value: movementTypeFilter,
+              onChange: setMovementTypeFilter,
+              options: [
+                { value: 'ALL', label: 'All Actions' },
+                { value: 'STOCK_IN', label: 'Truck Arrivals' },
+                { value: 'SALE_OUT', label: 'Walk-in Shop Sales' },
+                { value: 'WHOLESALE_OUT', label: 'Other Shop Deliveries' },
+                { value: 'DAMAGE', label: 'Dead / Damaged' },
+                { value: 'ADJUSTMENT', label: 'Manual Count Fixes' },
+              ],
+            },
+          ]}
+          mobileCardTitle={(m) => m.batchNumber}
+          mobileCardSubtitle={(m) => `${formatDateTime(m.createdAt)} · ${m.notes || m.movementType}`}
+          mobileCardBadge={(m) => (
+            <span className={`font-mono font-bold text-xs ${m.quantity > 0 ? 'text-[#2FB67C]' : 'text-rose-500'}`}>
+              {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+            </span>
+          )}
+        />
       )}
 
-      {/* MODAL: STOCK ADJUSTMENT */}
+      {/* MODAL: UPDATE STOCK COUNT */}
       <Modal
         isOpen={isAdjustOpen}
         onClose={() => setIsAdjustOpen(false)}
-        title="Authorized Stock Adjustment"
-        subtitle="Manually update batch piece counts for physical mortality or audit count corrections"
+        title="Update Bird Count"
+        subtitle="Subtract dead birds or fix a cage recount"
         maxWidth="md"
       >
         <form onSubmit={handleStockAdjustment} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Stock Batch *
-            </label>
-            <select
+            <label className="block text-xs font-bold mb-1.5">Pick Stock Lot *</label>
+            <Select
               value={adjustBatchId}
-              onChange={(e) => setAdjustBatchId(e.target.value)}
-              required
-              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
-            >
-              {batches
-                .filter((b) => !b.isClosed)
-                .map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.batchNumber} (Current stock: {b.remainingPieces} pcs)
-                  </option>
-                ))}
-            </select>
+              onChange={setAdjustBatchId}
+              options={activeBatchOptions}
+              placeholder="Choose available lot"
+            />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Quantity Change (+ / -) *
-            </label>
+            <label className="block text-xs font-bold mb-1.5">Change Amount (+ or -) *</label>
             <input
               type="number"
-              placeholder="e.g. -5 for mortality, +10 for recount"
+              placeholder="e.g. -5 for dead birds"
               value={quantityChange}
               onChange={(e) => setQuantityChange(e.target.value)}
               required
-              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800 font-mono font-bold"
+              className={`${inputCls} font-mono font-bold`}
             />
-            <p className="text-[10px] text-slate-500 mt-0.5">
-              Enter negative value (e.g. -5) to write off dead/damaged birds. Negative inventory is forbidden.
+            <p className="text-[11px] text-[#636B76] dark:text-[#8A929C] mt-1">
+              Use a minus sign (e.g. -5) to remove dead or spoiled birds.
             </p>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Reason / Explanation *
-            </label>
+            <label className="block text-xs font-bold mb-1.5">Reason *</label>
             <input
               type="text"
-              placeholder="e.g. Afternoon heat mortality count"
+              placeholder="e.g. Afternoon heat loss"
               value={adjustReason}
               onChange={(e) => setAdjustReason(e.target.value)}
               required
-              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
+              className={inputCls}
             />
           </div>
 
-          <div className="pt-2 flex justify-end space-x-2 border-t border-slate-200">
+          <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
               onClick={() => setIsAdjustOpen(false)}
-              className="px-3 py-1.5 text-xs font-medium border border-slate-300 rounded bg-white text-slate-700 hover:bg-slate-50"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={adjustSubmitting}
-              className="px-4 py-1.5 text-xs font-bold rounded bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50"
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
             >
-              {adjustSubmitting ? 'Recording...' : 'Apply Stock Adjustment'}
+              Update Count
             </button>
           </div>
         </form>

@@ -1,225 +1,204 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Settings as SettingsIcon,
   Save,
   Database,
   RefreshCw,
-  CheckCircle2,
-  AlertCircle,
-  HelpCircle,
 } from 'lucide-react';
 import { AppSettings } from '../types/index.ts';
-import { api } from '../services/api.ts';
-import { formatPKR } from '../utils/formatters.ts';
+import { useAppStore } from '../store/useAppStore.ts';
 
 interface SettingsPageProps {
-  onShowToast: (text: string, type: 'success' | 'error') => void;
+  onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ onShowToast }) => {
-  const [settings, setSettings] = useState<AppSettings>({
-    businessName: 'Al-Madina Poultry Traders',
-    businessLocation: 'Lahore Road, Punjab, Pakistan',
-    examplePrice1: '1200',
-    examplePrice2: '1500',
-    lowStockThreshold: '300',
-  });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [seeding, setSeeding] = useState(false);
+export const SettingsPage: React.FC<SettingsPageProps> = () => {
+  const storeSettings = useAppStore((s) => s.settings);
+  const updateSettings = useAppStore((s) => s.updateSettings);
+  const seedDemoData = useAppStore((s) => s.seedDemoData);
 
-  const fetchSettings = async () => {
-    try {
-      setLoading(true);
-      const res = await api.getSettings();
-      setSettings(res);
-    } catch (err: any) {
-      onShowToast(err.message || 'Failed to load settings', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [formState, setFormState] = useState<AppSettings>(storeSettings);
+  const [seeding, setSeeding] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
+    setFormState(storeSettings);
+  }, [storeSettings]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setSaving(true);
-      await api.updateSettings(settings);
-      onShowToast('Settings updated successfully', 'success');
-    } catch (err: any) {
-      onShowToast(err.message || 'Failed to update settings', 'error');
-    } finally {
-      setSaving(false);
+      await updateSettings(formState);
+    } catch {
+      // handled by store
     }
   };
 
-  const handleSeed = async () => {
-    if (
-      !confirm(
-        'Populate database with sample Punjab suppliers, vehicle loads, and sales records? (Will only add if database is empty)'
-      )
-    ) {
+  const handleSeed = async (force: boolean) => {
+    if (force && !confirmReset) {
+      setConfirmReset(true);
       return;
     }
-
+    setConfirmReset(false);
     try {
       setSeeding(true);
-      const res = await api.seedData();
-      onShowToast(res.message, 'success');
-    } catch (err: any) {
-      onShowToast(err.message || 'Seed failed', 'error');
+      await seedDemoData(force);
     } finally {
       setSeeding(false);
     }
   };
 
+  const inputCls =
+    'w-full min-h-[42px] px-4 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h2 className="text-[26px] sm:text-[28px] leading-[34px] font-extrabold tracking-[-0.02em] text-[#14161A] dark:text-[#F2F4F5]">
-          System Settings & Configurations
+    <div className="w-full space-y-4 sm:space-y-6">
+      <div className="hidden xl:block">
+        <h2 className="text-[28px] leading-[34px] font-extrabold tracking-[-0.02em] text-[#14161A] dark:text-[#F2F4F5]">
+          Shop Settings
         </h2>
         <p className="text-xs text-[#4A515B] dark:text-[#A3AAB3] mt-0.5">
-          Configure business details, benchmark pricing presets, and database controls
+          Update shop name, low stock warning level, and sample test data
         </p>
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Business Identity */}
-        <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-6 space-y-4 shadow-xs">
-          <h3 className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider border-b border-[#E3E6E8] dark:border-[#2A2F35] pb-2">
-            Business Identity
-          </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Business Identity */}
+          <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-5 sm:p-6 space-y-4 shadow-xs">
+            <h3 className="text-xs font-bold uppercase tracking-wider border-b border-[#E3E6E8] dark:border-[#2A2F35] pb-2">
+              Shop Details
+            </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider mb-1">
-                Business Name
-              </label>
-              <input
-                type="text"
-                value={settings.businessName}
-                onChange={(e) => setSettings({ ...settings, businessName: e.target.value })}
-                required
-                className="w-full px-4 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-full bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50 text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]"
-              />
-            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                  Shop / Business Name
+                </label>
+                <input
+                  type="text"
+                  value={formState.businessName}
+                  onChange={(e) => setFormState({ ...formState, businessName: e.target.value })}
+                  required
+                  className={inputCls}
+                />
+              </div>
 
-            <div>
-              <label className="block text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider mb-1">
-                Location & City (Punjab)
-              </label>
-              <input
-                type="text"
-                value={settings.businessLocation}
-                onChange={(e) => setSettings({ ...settings, businessLocation: e.target.value })}
-                required
-                className="w-full px-4 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-full bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50 text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]"
-              />
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                  Address / City
+                </label>
+                <input
+                  type="text"
+                  value={formState.businessLocation}
+                  onChange={(e) =>
+                    setFormState({ ...formState, businessLocation: e.target.value })
+                  }
+                  required
+                  className={inputCls}
+                />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Pricing Suggestion Benchmarks */}
-        <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-6 space-y-4 shadow-xs">
-          <h3 className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider border-b border-[#E3E6E8] dark:border-[#2A2F35] pb-2">
-            Selling Price Calculator Presets
-          </h3>
-          <p className="text-xs text-[#636B76] dark:text-[#8A929C]">
-            Configure the two example selling price benchmarks shown in the Cost Analysis calculator
-          </p>
+          {/* Pricing & Low Stock */}
+          <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-5 sm:p-6 space-y-4 shadow-xs">
+            <h3 className="text-xs font-bold uppercase tracking-wider border-b border-[#E3E6E8] dark:border-[#2A2F35] pb-2">
+              Price Checker & Stock Alerts
+            </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                  Test Selling Rate 1 (PKR)
+                </label>
+                <input
+                  type="number"
+                  value={formState.examplePrice1}
+                  onChange={(e) => setFormState({ ...formState, examplePrice1: e.target.value })}
+                  required
+                  className={`${inputCls} font-mono`}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                  Test Selling Rate 2 (PKR)
+                </label>
+                <input
+                  type="number"
+                  value={formState.examplePrice2}
+                  onChange={(e) => setFormState({ ...formState, examplePrice2: e.target.value })}
+                  required
+                  className={`${inputCls} font-mono`}
+                />
+              </div>
+            </div>
+
             <div>
-              <label className="block text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider mb-1">
-                Example Selling Price 1 (PKR)
+              <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                Low Stock Alert Below (Birds)
               </label>
               <input
                 type="number"
-                value={settings.examplePrice1}
-                onChange={(e) => setSettings({ ...settings, examplePrice1: e.target.value })}
+                value={formState.lowStockThreshold}
+                onChange={(e) =>
+                  setFormState({ ...formState, lowStockThreshold: e.target.value })
+                }
                 required
-                className="w-full px-4 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-full bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50 text-[#14161A] dark:text-[#F2F4F5] font-mono focus:outline-none focus:ring-2 focus:ring-[#D4F56B]"
+                className={`${inputCls} sm:w-56 font-mono`}
               />
-              <p className="text-[10px] text-[#636B76] dark:text-[#8A929C] mt-1">
-                Default benchmark (e.g. Rs. 1,200)
+              <p className="text-[11px] text-[#636B76] dark:text-[#8A929C] mt-1">
+                Show a low-stock alert when remaining birds fall below this count.
               </p>
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider mb-1">
-                Example Selling Price 2 (PKR)
-              </label>
-              <input
-                type="number"
-                value={settings.examplePrice2}
-                onChange={(e) => setSettings({ ...settings, examplePrice2: e.target.value })}
-                required
-                className="w-full px-4 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-full bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50 text-[#14161A] dark:text-[#F2F4F5] font-mono focus:outline-none focus:ring-2 focus:ring-[#D4F56B]"
-              />
-              <p className="text-[10px] text-[#636B76] dark:text-[#8A929C] mt-1">
-                Default benchmark (e.g. Rs. 1,500)
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Inventory Alert Threshold */}
-        <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-6 space-y-4 shadow-xs">
-          <h3 className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider border-b border-[#E3E6E8] dark:border-[#2A2F35] pb-2">
-            Inventory Alerts
-          </h3>
-
-          <div>
-            <label className="block text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider mb-1">
-              Low Stock Warning Threshold (Pieces)
-            </label>
-            <input
-              type="number"
-              value={settings.lowStockThreshold}
-              onChange={(e) => setSettings({ ...settings, lowStockThreshold: e.target.value })}
-              required
-              className="w-48 px-4 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-full bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50 text-[#14161A] dark:text-[#F2F4F5] font-mono focus:outline-none focus:ring-2 focus:ring-[#D4F56B]"
-            />
-            <p className="text-[10px] text-[#636B76] dark:text-[#8A929C] mt-1">
-              Batches with fewer than this number of remaining pieces will be flagged as low stock
-            </p>
           </div>
         </div>
 
         <div className="flex justify-end">
           <button
             type="submit"
-            disabled={saving}
-            className="px-6 py-2.5 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 flex items-center space-x-2 shadow-xs transition"
+            className="min-h-[44px] px-6 py-2.5 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] flex items-center gap-2 shadow-xs transition cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            <span>{saving ? 'Saving...' : 'Save All Settings'}</span>
+            <span>Save Settings</span>
           </button>
         </div>
       </form>
 
-      {/* Database Controls */}
-      <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-6 space-y-4 shadow-xs">
-        <h3 className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider">
-          Database Management
-        </h3>
+      {/* Sample Data Controls */}
+      <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-5 sm:p-6 space-y-4 shadow-xs">
+        <h3 className="text-xs font-bold uppercase tracking-wider">Sample Business Data</h3>
         <p className="text-xs text-[#636B76] dark:text-[#8A929C]">
-          Managed Cloud SQL PostgreSQL database with persistent storage
+          Load ready-made suppliers, trucks, bird stock, counter sales, wholesale shops, wages, and shop bills so every screen works together cleanly.
         </p>
 
-        <div className="flex items-center space-x-3 pt-2">
+        <div className="flex flex-wrap items-center gap-3 pt-1">
           <button
-            onClick={handleSeed}
+            type="button"
+            onClick={() => void handleSeed(false)}
             disabled={seeding}
-            className="px-4 py-2 text-xs font-bold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#20242A] text-[#14161A] dark:text-[#F2F4F5] hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] disabled:opacity-50 transition flex items-center space-x-2"
+            className="min-h-[42px] px-4 py-2 text-xs font-bold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#20242A] hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] disabled:opacity-50 transition flex items-center gap-2 cursor-pointer"
           >
             <Database className="w-3.5 h-3.5" />
-            <span>{seeding ? 'Seeding...' : 'Seed Sample Pakistani Poultry Data'}</span>
+            <span>{seeding ? 'Loading...' : 'Fill Sample Data (If Empty)'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void handleSeed(true)}
+            disabled={seeding}
+            className={`min-h-[42px] px-4 py-2 text-xs font-bold rounded-full transition flex items-center gap-2 cursor-pointer ${
+              confirmReset
+                ? 'bg-rose-600 text-white'
+                : 'border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+            }`}
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>
+              {confirmReset
+                ? 'Click Again to Reset All Data'
+                : 'Reset to Fresh Sample Data'}
+            </span>
           </button>
         </div>
       </div>

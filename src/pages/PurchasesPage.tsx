@@ -1,151 +1,124 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Truck,
   Plus,
-  Calendar,
-  Search,
   CheckCircle2,
   AlertCircle,
-  FileText,
-  DollarSign,
-  Package,
   Trash2,
-  Receipt,
-  Scale,
 } from 'lucide-react';
-import { PurchaseLoad, Supplier, Vehicle, LoadExpense } from '../types/index.ts';
-import { api } from '../services/api.ts';
+import { PurchaseLoad } from '../types/index.ts';
 import { Modal } from '../components/common/Modal.tsx';
+import { Select } from '../components/common/Select.tsx';
+import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { formatPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import {
   calculatePurchaseRate,
   calculateSaleablePieces,
-  calculateLandedCost,
-  calculateCostPerPiece,
 } from '../utils/poultryMath.ts';
+import { useAppStore } from '../store/useAppStore.ts';
+import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
 
 interface PurchasesPageProps {
-  onShowToast: (text: string, type: 'success' | 'error') => void;
+  onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
   initialOpenNewModal?: boolean;
 }
+
+const EXPENSE_CAT_OPTIONS = [
+  { value: 'Fuel', label: 'Fuel (Diesel)' },
+  { value: 'Transportation', label: 'Truck Rent / Fare' },
+  { value: 'Loading', label: 'Farm Loading' },
+  { value: 'Unloading', label: 'Shop Unloading' },
+  { value: 'Driver Expense', label: 'Driver Food & Bhatta' },
+  { value: 'Other', label: 'Other Cost' },
+];
 
 export const PurchasesPage: React.FC<PurchasesPageProps> = ({
   onShowToast,
   initialOpenNewModal = false,
 }) => {
-  const [loads, setLoads] = useState<PurchaseLoad[]>([]);
-  const [suppliersList, setSuppliersList] = useState<Supplier[]>([]);
-  const [vehiclesList, setVehiclesList] = useState<Vehicle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const loads = useAppStore((s) => s.purchases);
+  const suppliersList = useAppStore((s) => s.suppliers);
+  const loading = useAppStore((s) => s.loading);
+  const initialized = useAppStore((s) => s.initialized);
+  const createPurchase = useAppStore((s) => s.createPurchase);
+  const addLoadExpense = useAppStore((s) => s.addLoadExpense);
+  const deleteLoadExpense = useAppStore((s) => s.deleteLoadExpense);
+  const receiveStock = useAppStore((s) => s.receiveStock);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [supplierFilter, setSupplierFilter] = useState('ALL');
 
   // Modals
   const [isNewLoadOpen, setIsNewLoadOpen] = useState(initialOpenNewModal);
   const [selectedLoadId, setSelectedLoadId] = useState<number | null>(null);
-  const [loadDetails, setLoadDetails] = useState<PurchaseLoad | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-
-  // Receiving Modal
   const [isReceivingOpen, setIsReceivingOpen] = useState(false);
   const [receivingLoad, setReceivingLoad] = useState<PurchaseLoad | null>(null);
+  const [confirmDeleteExpId, setConfirmDeleteExpId] = useState<number | null>(null);
 
   // Form states for New Load
   const [supplierId, setSupplierId] = useState('');
-  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [purchaseDate, setPurchaseDate] = useState(() => getLocalPakistanDate());
   const [totalWeightKg, setTotalWeightKg] = useState('');
   const [purchaseAmount, setPurchaseAmount] = useState('');
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [driverName, setDriverName] = useState('');
   const [notes, setNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
   // Form states for Add Expense
   const [expenseCategory, setExpenseCategory] = useState('Fuel');
   const [expenseAmount, setExpenseAmount] = useState('');
-  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [expenseDate, setExpenseDate] = useState(() => getLocalPakistanDate());
   const [expenseDesc, setExpenseDesc] = useState('');
-  const [addingExpense, setAddingExpense] = useState(false);
 
   // Form states for Receiving
-  const [recvDate, setRecvDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [recvDate, setRecvDate] = useState(() => getLocalPakistanDate());
   const [receivedPieces, setReceivedPieces] = useState('');
   const [deadPieces, setDeadPieces] = useState('0');
   const [damagedPieces, setDamagedPieces] = useState('0');
   const [receivingNotes, setReceivingNotes] = useState('');
-  const [receivingSubmitting, setReceivingSubmitting] = useState(false);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [loadsRes, supsRes, vehsRes] = await Promise.all([
-        api.getPurchases(),
-        api.getSuppliers(),
-        api.getVehicles(),
-      ]);
-      setLoads(loadsRes);
-      setSuppliersList(supsRes);
-      setVehiclesList(vehsRes);
-      if (supsRes.length > 0 && !supplierId) {
-        setSupplierId(String(supsRes[0].id));
-      }
-    } catch (err: any) {
-      onShowToast(err.message || 'Failed to fetch purchases', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  const openLoadDetails = async (id: number) => {
-    try {
-      setSelectedLoadId(id);
-      setDetailsLoading(true);
-      const res = await api.getPurchase(id);
-      setLoadDetails(res);
-    } catch (err: any) {
-      onShowToast(err.message || 'Failed to fetch load details', 'error');
-    } finally {
-      setDetailsLoading(false);
+    if (suppliersList.length > 0 && !supplierId) {
+      setSupplierId(String(suppliersList[0].id));
     }
-  };
+  }, [suppliersList, supplierId]);
+
+  // Live selected load from Zustand store so details update immediately
+  const loadDetails = useMemo(
+    () => (selectedLoadId ? loads.find((l) => l.id === selectedLoadId) || null : null),
+    [loads, selectedLoadId]
+  );
 
   const handleCreateLoad = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supplierId || !totalWeightKg || !purchaseAmount) {
-      onShowToast('Please fill all required purchase load fields', 'error');
+      onShowToast('Please fill all required fields', 'error');
       return;
     }
 
+    const supId = parseInt(supplierId, 10);
+    const weight = parseFloat(totalWeightKg);
+    const amt = parseFloat(purchaseAmount);
+
+    setIsNewLoadOpen(false);
+    setTotalWeightKg('');
+    setPurchaseAmount('');
+    setVehicleNumber('');
+    setDriverName('');
+    setNotes('');
+
     try {
-      setSubmitting(true);
-      const created = await api.createPurchase({
-        supplierId: parseInt(supplierId, 10),
+      await createPurchase({
+        supplierId: supId,
         purchaseDate,
-        totalWeightKg: parseFloat(totalWeightKg),
-        purchaseAmount: parseFloat(purchaseAmount),
+        totalWeightKg: weight,
+        purchaseAmount: amt,
         vehicleNumber: vehicleNumber || undefined,
         driverName: driverName || undefined,
         notes: notes || undefined,
       });
-
-      onShowToast(`Purchase Load ${created.loadNumber} created successfully!`, 'success');
-      setIsNewLoadOpen(false);
-      // Reset
-      setTotalWeightKg('');
-      setPurchaseAmount('');
-      setVehicleNumber('');
-      setDriverName('');
-      setNotes('');
-      await fetchData();
-      openLoadDetails(created.id);
-    } catch (err: any) {
-      onShowToast(err.message || 'Failed to create purchase load', 'error');
-    } finally {
-      setSubmitting(false);
+    } catch {
+      // store rolls back & shows toast
     }
   };
 
@@ -156,39 +129,34 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       return;
     }
 
+    const amt = parseFloat(expenseAmount);
+    const desc = expenseDesc;
+    setExpenseAmount('');
+    setExpenseDesc('');
+
     try {
-      setAddingExpense(true);
-      await api.addLoadExpense(selectedLoadId, {
+      await addLoadExpense(selectedLoadId, {
         category: expenseCategory,
-        amount: parseFloat(expenseAmount),
+        amount: amt,
         expenseDate,
-        description: expenseDesc || undefined,
+        description: desc || undefined,
       });
-      onShowToast('Load expense added successfully', 'success');
-      setExpenseAmount('');
-      setExpenseDesc('');
-      // Reload details and list
-      const updated = await api.getPurchase(selectedLoadId);
-      setLoadDetails(updated);
-      fetchData();
-    } catch (err: any) {
-      onShowToast(err.message || 'Failed to add load expense', 'error');
-    } finally {
-      setAddingExpense(false);
+    } catch {
+      // handled by store
     }
   };
 
   const handleDeleteExpense = async (expenseId: number) => {
     if (!selectedLoadId) return;
-    if (!confirm('Are you sure you want to remove this expense?')) return;
+    if (confirmDeleteExpId !== expenseId) {
+      setConfirmDeleteExpId(expenseId);
+      return;
+    }
+    setConfirmDeleteExpId(null);
     try {
-      await api.deleteLoadExpense(selectedLoadId, expenseId);
-      onShowToast('Expense removed', 'success');
-      const updated = await api.getPurchase(selectedLoadId);
-      setLoadDetails(updated);
-      fetchData();
-    } catch (err: any) {
-      onShowToast(err.message || 'Failed to delete expense', 'error');
+      await deleteLoadExpense(selectedLoadId, expenseId);
+    } catch {
+      // handled by store
     }
   };
 
@@ -206,257 +174,319 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
     if (!receivingLoad) return;
     const pieces = parseInt(receivedPieces, 10);
     if (isNaN(pieces) || pieces <= 0) {
-      onShowToast('Please enter the actual received pieces counted', 'error');
+      onShowToast('Please enter the number of birds unloaded', 'error');
       return;
     }
 
+    const targetId = receivingLoad.id;
+    setIsReceivingOpen(false);
     try {
-      setReceivingSubmitting(true);
-      const batch = await api.receiveStock(receivingLoad.id, {
+      await receiveStock(targetId, {
         receivingDate: recvDate,
         receivedPieces: pieces,
         deadPieces: parseInt(deadPieces || '0', 10),
         damagedPieces: parseInt(damagedPieces || '0', 10),
         notes: receivingNotes || undefined,
       });
-
-      onShowToast(
-        `Stock Batch ${batch.batchNumber} generated! ${batch.originalSaleablePieces} saleable pieces in inventory.`,
-        'success'
-      );
-      setIsReceivingOpen(false);
-      await fetchData();
-      if (selectedLoadId === receivingLoad.id) {
-        openLoadDetails(receivingLoad.id);
-      }
-    } catch (err: any) {
-      onShowToast(err.message || 'Stock receiving failed', 'error');
-    } finally {
-      setReceivingSubmitting(false);
+    } catch {
+      // handled by store
     }
   };
 
-  // Filtered loads
-  const filteredLoads = loads.filter((load) => {
-    const matchesSearch =
-      load.loadNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      load.supplierName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (load.vehicleNumber && load.vehicleNumber.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredLoads = useMemo(() => {
+    return loads.filter((load) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        load.loadNumber.toLowerCase().includes(q) ||
+        load.supplierName.toLowerCase().includes(q) ||
+        (load.vehicleNumber && load.vehicleNumber.toLowerCase().includes(q));
+      const matchesStatus = statusFilter === 'ALL' || load.status === statusFilter;
+      const matchesSup = supplierFilter === 'ALL' || String(load.supplierId) === supplierFilter;
+      return matchesSearch && matchesStatus && matchesSup;
+    });
+  }, [loads, searchQuery, statusFilter, supplierFilter]);
 
-    const matchesStatus = statusFilter === 'ALL' || load.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const supplierOptions = useMemo(
+    () =>
+      suppliersList.map((sup) => ({
+        value: String(sup.id),
+        label: sup.name,
+        sublabel: sup.phone || undefined,
+      })),
+    [suppliersList]
+  );
 
-  // Calculate live preview rate for new load
+  const columns: DataTableColumn<PurchaseLoad>[] = [
+    {
+      key: 'loadNumber',
+      header: 'Load #',
+      sortable: true,
+      alwaysVisible: true,
+      hideOnMobileDefault: true,
+      render: (load) => (
+        <span className="font-bold text-[#14161A] dark:text-[#F2F4F5] font-mono">
+          {load.loadNumber}
+        </span>
+      ),
+    },
+    {
+      key: 'supplierName',
+      header: 'Supplier & Truck',
+      sortable: true,
+      alwaysVisible: true,
+      hideOnMobileDefault: true,
+      render: (load) => (
+        <div>
+          <div className="font-semibold text-[#14161A] dark:text-[#F2F4F5]">{load.supplierName}</div>
+          {load.vehicleNumber && (
+            <div className="text-[10px] text-[#636B76] dark:text-[#8A929C] font-mono">
+              {load.vehicleNumber} {load.driverName ? `(${load.driverName})` : ''}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'purchaseDate',
+      header: 'Date',
+      sortable: true,
+      hideOnMobileDefault: true,
+      render: (load) => (
+        <span className="text-[#4A515B] dark:text-[#A3AAB3]">{formatDate(load.purchaseDate)}</span>
+      ),
+    },
+    {
+      key: 'totalWeightKg',
+      header: 'Weight',
+      align: 'right',
+      sortable: true,
+      sortValue: (l) => Number(l.totalWeightKg),
+      render: (load) => (
+        <span className="font-mono text-[#14161A] dark:text-[#F2F4F5]">
+          {formatNumber(load.totalWeightKg)} KG
+        </span>
+      ),
+    },
+    {
+      key: 'purchaseRatePerKg',
+      header: 'Price / KG',
+      align: 'right',
+      sortable: true,
+      defaultVisible: false,
+      sortValue: (l) => Number(l.purchaseRatePerKg),
+      render: (load) => (
+        <span className="font-mono text-[#4A515B] dark:text-[#A3AAB3]">
+          {formatPKR(load.purchaseRatePerKg)}
+        </span>
+      ),
+    },
+    {
+      key: 'purchaseAmount',
+      header: 'Bird Bill',
+      align: 'right',
+      sortable: true,
+      defaultVisible: false,
+      sortValue: (l) => Number(l.purchaseAmount),
+      render: (load) => <span className="font-mono font-bold">{formatPKR(load.purchaseAmount)}</span>,
+    },
+    {
+      key: 'totalExpenses',
+      header: 'Truck Costs',
+      align: 'right',
+      sortable: true,
+      defaultVisible: false,
+      sortValue: (l) => Number(l.totalExpenses || 0),
+      render: (load) => (
+        <span className="font-mono text-[#4A515B] dark:text-[#A3AAB3]">
+          {formatPKR(load.totalExpenses || 0)}
+        </span>
+      ),
+    },
+    {
+      key: 'totalLandedCost',
+      header: 'Total Cost',
+      align: 'right',
+      sortable: true,
+      sortValue: (l) => Number(l.totalLandedCost || l.purchaseAmount),
+      render: (load) => (
+        <span className="font-mono font-black text-[#14161A] dark:text-[#D4F56B]">
+          {formatPKR(load.totalLandedCost || load.purchaseAmount)}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      align: 'center',
+      sortable: true,
+      hideOnMobileDefault: true,
+      render: (load) => (
+        <span
+          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider ${
+            load.status === 'RECEIVED'
+              ? 'bg-[#92E2B3]/25 text-emerald-800 dark:text-[#92E2B3] border border-[#92E2B3]/40'
+              : 'bg-[#F6E7A1]/35 text-amber-900 dark:text-[#F6E7A1] border border-[#F6E7A1]/50'
+          }`}
+        >
+          {load.status === 'RECEIVED' ? 'IN STOCK' : 'COUNT BIRDS'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      alwaysVisible: true,
+      render: (load) => (
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          {load.status !== 'RECEIVED' && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openReceivingForm(load);
+              }}
+              className="px-3 py-1.5 text-[11px] font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs cursor-pointer"
+            >
+              Count Birds
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedLoadId(load.id);
+              setConfirmDeleteExpId(null);
+            }}
+            className="px-3 py-1.5 text-[11px] font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] text-[#14161A] dark:text-[#F2F4F5] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] transition cursor-pointer"
+          >
+            Costs & Info
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   const liveRatePerKg =
     parseFloat(totalWeightKg) > 0 && parseFloat(purchaseAmount) > 0
       ? calculatePurchaseRate(parseFloat(purchaseAmount), parseFloat(totalWeightKg))
       : 0;
 
-  // Calculate live saleable pieces for receiving
   const liveReceived = parseInt(receivedPieces || '0', 10);
   const liveDead = parseInt(deadPieces || '0', 10);
   const liveDamaged = parseInt(damagedPieces || '0', 10);
   const liveSaleable = calculateSaleablePieces(liveReceived, liveDead, liveDamaged);
 
+  const inputCls =
+    'w-full min-h-[42px] px-3.5 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
+  const labelCls = 'block text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] mb-1.5';
+
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto">
-      {/* Top action header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-[26px] sm:text-[28px] leading-[34px] font-extrabold tracking-[-0.02em] text-[#14161A] dark:text-[#F2F4F5]">
-            Purchases & Loads Management
+    <div className="w-full space-y-4 sm:space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+        <div className="hidden xl:block">
+          <h2 className="text-[28px] leading-[34px] font-extrabold tracking-[-0.02em] text-[#14161A] dark:text-[#F2F4F5]">
+            Truck Purchases & Arrivals
           </h2>
           <p className="text-xs text-[#4A515B] dark:text-[#A3AAB3] mt-0.5">
-            Record live broiler weight from Punjab, track vehicle transit expenses, and receive inventory batches
+            Record chicken trucks from suppliers, add diesel or driver costs, and count birds into stock
           </p>
         </div>
 
         <button
+          type="button"
           onClick={() => setIsNewLoadOpen(true)}
-          className="inline-flex items-center px-4 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs"
+          className="w-full sm:w-auto xl:ml-auto min-h-[40px] inline-flex items-center justify-center px-4 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs cursor-pointer"
         >
           <Plus className="w-4 h-4 mr-1.5" />
-          New Purchase Load
+          New Truck Purchase
         </button>
       </div>
 
-      {/* Filter and Search Bar Floating Island */}
-      <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-        <div className="flex items-center space-x-2 flex-1 max-w-sm">
-          <div className="relative w-full">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#636B76] dark:text-[#8A929C]" />
-            <input
-              type="text"
-              placeholder="Search load #, supplier, vehicle..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-full bg-[#F3F5F6]/50 dark:bg-[#1F2328]/50 text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-1.5 text-xs">
-          <span className="font-semibold text-[#636B76] dark:text-[#8A929C] mr-1">Status:</span>
-          {['ALL', 'PENDING_RECEIVING', 'RECEIVED'].map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={`px-3 py-1 rounded-full text-xs font-bold tracking-wider transition ${
-                statusFilter === s
-                  ? 'bg-[#14161A] text-[#D4F56B] dark:bg-[#D4F56B] dark:text-[#14161A]'
-                  : 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
-              }`}
-            >
-              {s === 'ALL' ? 'ALL' : s === 'PENDING_RECEIVING' ? 'PENDING RECEIVING' : 'RECEIVED'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Table Floating Island */}
-      <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] text-[#4A515B] dark:text-[#A3AAB3] font-bold uppercase tracking-wider text-[11px]">
-                <th className="py-2.5 px-3">Load Number</th>
-                <th className="py-2.5 px-3">Supplier</th>
-                <th className="py-2.5 px-3">Date</th>
-                <th className="py-2.5 px-3 text-right">Weight (KG)</th>
-                <th className="py-2.5 px-3 text-right">Rate / KG</th>
-                <th className="py-2.5 px-3 text-right">Purchase Amount</th>
-                <th className="py-2.5 px-3 text-right">Load Expenses</th>
-                <th className="py-2.5 px-3 text-right font-bold text-slate-800">Landed Cost</th>
-                <th className="py-2.5 px-3 text-center">Status</th>
-                <th className="py-2.5 px-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
-              {loading ? (
-                <tr>
-                  <td colSpan={10} className="py-8 text-center text-[#636B76] dark:text-[#8A929C]">
-                    Loading purchase loads...
-                  </td>
-                </tr>
-              ) : filteredLoads.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="py-8 text-center text-[#636B76] dark:text-[#8A929C]">
-                    No purchase loads found. Click "New Purchase Load" to record your first vehicle arrival.
-                  </td>
-                </tr>
-              ) : (
-                filteredLoads.map((load) => (
-                  <tr key={load.id} className="hover:bg-[#F8F9FA] dark:hover:bg-[#20242A]/60 transition">
-                    <td className="py-3 px-3 font-bold text-[#14161A] dark:text-[#F2F4F5] font-mono">
-                      {load.loadNumber}
-                    </td>
-                    <td className="py-3 px-3">
-                      <div className="font-semibold text-[#14161A] dark:text-[#F2F4F5]">{load.supplierName}</div>
-                      {load.vehicleNumber && (
-                        <div className="text-[10px] text-[#636B76] dark:text-[#8A929C] font-mono">
-                          {load.vehicleNumber} {load.driverName ? `(${load.driverName})` : ''}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-[#4A515B] dark:text-[#A3AAB3]">{formatDate(load.purchaseDate)}</td>
-                    <td className="py-3 px-3 text-right font-mono text-[#14161A] dark:text-[#F2F4F5]">
-                      {formatNumber(load.totalWeightKg)} KG
-                    </td>
-                    <td className="py-3 px-3 text-right font-mono text-[#4A515B] dark:text-[#A3AAB3]">
-                      {formatPKR(load.purchaseRatePerKg)}
-                    </td>
-                    <td className="py-3 px-3 text-right font-bold text-[#14161A] dark:text-[#F2F4F5] font-mono">
-                      {formatPKR(load.purchaseAmount)}
-                    </td>
-                    <td className="py-3 px-3 text-right text-[#4A515B] dark:text-[#A3AAB3] font-mono">
-                      {formatPKR(load.totalExpenses || 0)}
-                    </td>
-                    <td className="py-3 px-3 text-right font-black text-[#14161A] dark:text-[#D4F56B] font-mono">
-                      {formatPKR(load.totalLandedCost || load.purchaseAmount)}
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider ${
-                          load.status === 'RECEIVED'
-                            ? 'bg-[#92E2B3]/25 text-emerald-800 dark:text-[#92E2B3] border border-[#92E2B3]/40'
-                            : 'bg-[#F6E7A1]/30 text-amber-900 dark:text-[#F6E7A1] border border-[#F6E7A1]/50'
-                        }`}
-                      >
-                        {load.status === 'RECEIVED' ? 'STOCK RECEIVED' : 'PENDING COUNT'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right space-x-1.5 whitespace-nowrap">
-                      {load.status !== 'RECEIVED' && (
-                        <button
-                          onClick={() => openReceivingForm(load)}
-                          className="px-3 py-1 text-[11px] font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs"
-                        >
-                          Receive Stock
-                        </button>
-                      )}
-                      <button
-                        onClick={() => openLoadDetails(load.id)}
-                        className="px-3 py-1 text-[11px] font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] text-[#14161A] dark:text-[#F2F4F5] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] transition"
-                      >
-                        Details & Expenses
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        tableId="purchases"
+        data={filteredLoads}
+        columns={columns}
+        keyExtractor={(l) => l.id}
+        loading={loading && !initialized}
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search load #, supplier, truck..."
+        emptyMessage="No truck purchases yet. Click 'New Truck Purchase' to add one."
+        defaultSortKey="purchaseDate"
+        defaultSortDir="desc"
+        filters={[
+          {
+            key: 'status',
+            label: 'Status',
+            value: statusFilter,
+            onChange: setStatusFilter,
+            options: [
+              { value: 'ALL', label: 'All Trucks' },
+              { value: 'PENDING_RECEIVING', label: 'Waiting for Count' },
+              { value: 'RECEIVED', label: 'In Stock' },
+            ],
+          },
+          {
+            key: 'supplier',
+            label: 'Supplier',
+            value: supplierFilter,
+            onChange: setSupplierFilter,
+            options: [{ value: 'ALL', label: 'All Suppliers' }, ...supplierOptions],
+          },
+        ]}
+        mobileCardTitle={(l) => l.loadNumber}
+        mobileCardSubtitle={(l) => `${l.supplierName} · ${formatDate(l.purchaseDate)}`}
+        mobileCardBadge={(l) => (
+          <span
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+              l.status === 'RECEIVED'
+                ? 'bg-[#92E2B3]/30 text-emerald-800 dark:text-[#92E2B3]'
+                : 'bg-[#F6E7A1]/40 text-amber-900 dark:text-[#F6E7A1]'
+            }`}
+          >
+            {l.status === 'RECEIVED' ? 'IN STOCK' : 'COUNT BIRDS'}
+          </span>
+        )}
+      />
 
       {/* MODAL 1: NEW PURCHASE LOAD */}
       <Modal
         isOpen={isNewLoadOpen}
         onClose={() => setIsNewLoadOpen(false)}
-        title="Record New Purchase Load"
-        subtitle="Live chicken purchase recorded in KG directly from Punjab supplier"
+        title="Add New Truck Purchase"
+        subtitle="Record total chicken weight and supplier bill in PKR"
         maxWidth="lg"
       >
         <form onSubmit={handleCreateLoad} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Supplier (Punjab Dealer) *
-              </label>
-              <select
+              <label className={labelCls}>Supplier (Farm Dealer) *</label>
+              <Select
                 value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
-                required
-                className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              >
-                {suppliersList.map((sup) => (
-                  <option key={sup.id} value={sup.id}>
-                    {sup.name} {sup.phone ? `(${sup.phone})` : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={setSupplierId}
+                options={supplierOptions}
+                placeholder="Choose supplier"
+                searchable
+              />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Purchase Date *
-              </label>
+              <label className={labelCls}>Purchase Date *</label>
               <input
                 type="date"
                 value={purchaseDate}
                 onChange={(e) => setPurchaseDate(e.target.value)}
                 required
-                className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
+                className={inputCls}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Total Weight in KG *
-              </label>
+              <label className={labelCls}>Total Weight (KG) *</label>
               <div className="relative">
                 <input
                   type="number"
@@ -465,21 +495,16 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                   value={totalWeightKg}
                   onChange={(e) => setTotalWeightKg(e.target.value)}
                   required
-                  className="w-full pl-3 pr-8 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800 font-mono"
+                  className={`${inputCls} font-mono pr-10`}
                 />
-                <span className="absolute right-2.5 top-1.5 text-[11px] text-slate-400 font-bold">
+                <span className="absolute right-3.5 top-3 text-[11px] text-[#636B76] font-bold">
                   KG
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 mt-0.5">
-                Total weight of live birds on vehicle scale
-              </p>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Total Purchase Amount (PKR) *
-              </label>
+              <label className={labelCls}>Supplier Bill Amount (PKR) *</label>
               <div className="relative">
                 <input
                   type="number"
@@ -488,133 +513,118 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                   value={purchaseAmount}
                   onChange={(e) => setPurchaseAmount(e.target.value)}
                   required
-                  className="w-full pl-3 pr-10 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800 font-mono"
+                  className={`${inputCls} font-mono pr-12`}
                 />
-                <span className="absolute right-2 top-1.5 text-[10px] text-slate-400 font-bold">
+                <span className="absolute right-3.5 top-3 text-[10px] text-[#636B76] font-bold">
                   PKR
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 mt-0.5">
-                Total PKR owed to supplier for this load
-              </p>
             </div>
           </div>
 
-          {/* Auto Calculation Preview */}
-          <div className="p-3 bg-slate-50 rounded border border-slate-200 flex items-center justify-between">
-            <span className="text-xs text-slate-600 font-medium">
-              Calculated Rate per KG:
+          <div className="p-3.5 bg-[#F8F9FA] dark:bg-[#20242A] rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-between">
+            <span className="text-xs text-[#636B76] dark:text-[#8A929C] font-semibold">
+              Price per KG:
             </span>
-            <span className="text-sm font-bold text-emerald-700 font-mono">
-              {liveRatePerKg > 0 ? formatPKR(liveRatePerKg) + ' / KG' : 'Enter weight & amount'}
+            <span className="text-sm font-black text-[#2FB67C] font-mono">
+              {liveRatePerKg > 0 ? `${formatPKR(liveRatePerKg)} / KG` : 'Enter weight & bill'}
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Vehicle Number
-              </label>
+              <label className={labelCls}>Truck Number</label>
               <input
                 type="text"
                 placeholder="e.g. LES-4921"
                 value={vehicleNumber}
                 onChange={(e) => setVehicleNumber(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800 uppercase font-mono"
+                className={`${inputCls} uppercase font-mono`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Driver Name
-              </label>
+              <label className={labelCls}>Driver Name</label>
               <input
                 type="text"
                 placeholder="e.g. Muhammad Aslam"
                 value={driverName}
                 onChange={(e) => setDriverName(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
+                className={inputCls}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Notes (Optional)
-            </label>
+            <label className={labelCls}>Notes (Optional)</label>
             <input
               type="text"
-              placeholder="e.g. Heavy broiler batch from Gujranwala farm"
+              placeholder="e.g. Heavy broiler birds from Gujranwala"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
+              className={inputCls}
             />
           </div>
 
-          <div className="pt-2 flex justify-end space-x-2 border-t border-slate-200">
+          <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
               onClick={() => setIsNewLoadOpen(false)}
-              className="px-3 py-1.5 text-xs font-medium border border-slate-300 rounded bg-white text-slate-700 hover:bg-slate-50"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] text-[#14161A] dark:text-[#F2F4F5] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={submitting}
-              className="px-4 py-1.5 text-xs font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
             >
-              {submitting ? 'Saving Load...' : 'Save Purchase Load'}
+              Save Truck Purchase
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL 2: STOCK RECEIVING FORM */}
+      {/* MODAL 2: COUNT BIRDS INTO STOCK */}
       <Modal
         isOpen={isReceivingOpen}
         onClose={() => setIsReceivingOpen(false)}
-        title={`Receive Stock Count: ${receivingLoad?.loadNumber || ''}`}
-        subtitle="Count actual live pieces on arrival to establish saleable inventory pieces"
+        title={`Count Birds: ${receivingLoad?.loadNumber || ''}`}
+        subtitle="Enter total birds unloaded and any dead or weak birds"
         maxWidth="md"
       >
         <form onSubmit={handleReceiveStock} className="space-y-4">
-          <div className="p-3 bg-slate-50 rounded border border-slate-200 text-xs">
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">Supplier:</span>
-              <span className="font-semibold text-slate-800">{receivingLoad?.supplierName}</span>
+          <div className="p-3.5 bg-[#F8F9FA] dark:bg-[#20242A] rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-[#636B76] dark:text-[#8A929C]">Supplier:</span>
+              <span className="font-bold">{receivingLoad?.supplierName}</span>
             </div>
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">Billed Weight:</span>
-              <span className="font-mono font-medium text-slate-800">
+            <div className="flex justify-between">
+              <span className="text-[#636B76] dark:text-[#8A929C]">Truck Weight:</span>
+              <span className="font-mono font-semibold">
                 {receivingLoad ? formatNumber(receivingLoad.totalWeightKg) : 0} KG
               </span>
             </div>
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">Purchase Amount:</span>
-              <span className="font-mono font-bold text-slate-900">
-                {receivingLoad ? formatPKR(receivingLoad.purchaseAmount) : 0}
+            <div className="flex justify-between">
+              <span className="text-[#636B76] dark:text-[#8A929C]">Total Cost So Far:</span>
+              <span className="font-mono font-bold text-[#2FB67C]">
+                {receivingLoad ? formatPKR(receivingLoad.totalLandedCost || receivingLoad.purchaseAmount) : 0}
               </span>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Receiving Date *
-            </label>
+            <label className={labelCls}>Arrival Date *</label>
             <input
               type="date"
               value={recvDate}
               onChange={(e) => setRecvDate(e.target.value)}
               required
-              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
+              className={inputCls}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Total Received Pieces Counted *
-            </label>
+            <label className={labelCls}>Total Birds Counted *</label>
             <input
               type="number"
               placeholder="e.g. 900"
@@ -622,344 +632,327 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
               onChange={(e) => setReceivedPieces(e.target.value)}
               required
               min="1"
-              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800 font-mono font-bold"
+              className={`${inputCls} font-mono font-bold`}
             />
-            <p className="text-[10px] text-slate-500 mt-0.5">
-              Physical piece count unloaded from the vehicle cages
-            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Dead Pieces (Mortality)
-              </label>
+              <label className={labelCls}>Dead Birds</label>
               <input
                 type="number"
                 value={deadPieces}
                 onChange={(e) => setDeadPieces(e.target.value)}
                 min="0"
-                className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800 font-mono"
+                className={`${inputCls} font-mono`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Damaged / Bruised Pieces
-              </label>
+              <label className={labelCls}>Damaged / Weak</label>
               <input
                 type="number"
                 value={damagedPieces}
                 onChange={(e) => setDamagedPieces(e.target.value)}
                 min="0"
-                className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800 font-mono"
+                className={`${inputCls} font-mono`}
               />
             </div>
           </div>
 
-          {/* Automatic Calculation of Saleable Pieces */}
-          <div className="p-3 bg-emerald-50 rounded border border-emerald-200">
+          <div className="p-3.5 bg-[#92E2B3]/20 border border-[#92E2B3]/40 rounded-[14px]">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-emerald-900">
-                Calculated Saleable Pieces:
+              <span className="text-xs font-bold text-emerald-950 dark:text-[#92E2B3]">
+                Healthy Birds Ready to Sell:
               </span>
-              <span className="text-base font-bold text-emerald-800 font-mono">
-                {liveSaleable} pieces
+              <span className="text-base font-black text-emerald-800 dark:text-[#92E2B3] font-mono">
+                {liveSaleable} birds
               </span>
             </div>
-            <p className="text-[10px] text-emerald-700 mt-0.5">
-              Formula: Received ({liveReceived}) - Dead ({liveDead}) - Damaged ({liveDamaged})
+            <p className="text-[11px] text-emerald-800 dark:text-[#92E2B3]/80 mt-0.5">
+              {liveReceived} total - {liveDead} dead - {liveDamaged} damaged
             </p>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Receiving Notes (Optional)
-            </label>
+            <label className={labelCls}>Notes (Optional)</label>
             <input
               type="text"
-              placeholder="e.g. Good health, average piece size 2.1 KG"
+              placeholder="e.g. Healthy flock, ~2.1 KG average"
               value={receivingNotes}
               onChange={(e) => setReceivingNotes(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
+              className={inputCls}
             />
           </div>
 
-          <div className="pt-2 flex justify-end space-x-2 border-t border-slate-200">
+          <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
               onClick={() => setIsReceivingOpen(false)}
-              className="px-3 py-1.5 text-xs font-medium border border-slate-300 rounded bg-white text-slate-700 hover:bg-slate-50"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={receivingSubmitting || liveSaleable <= 0}
-              className="px-4 py-1.5 text-xs font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+              disabled={liveSaleable <= 0}
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 cursor-pointer"
             >
-              {receivingSubmitting ? 'Creating Batch...' : 'Confirm Stock Receiving'}
+              Add Birds to Stock
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL 3: LOAD DETAILS & EXPENSES DRAWER */}
-      {selectedLoadId && (
+      {/* MODAL 3: LOAD DETAILS & TRANSIT EXPENSES */}
+      {selectedLoadId && loadDetails && (
         <Modal
           isOpen={Boolean(selectedLoadId)}
           onClose={() => {
             setSelectedLoadId(null);
-            setLoadDetails(null);
+            setConfirmDeleteExpId(null);
           }}
-          title={`Load Details: ${loadDetails?.loadNumber || 'Loading...'}`}
-          subtitle="Full landed cost breakdown, transport expenses, and batch status"
+          title={`Truck Details: ${loadDetails.loadNumber}`}
+          subtitle="Supplier bill, truck fuel/driver expenses, and bird cost breakdown"
           maxWidth="2xl"
         >
-          {detailsLoading || !loadDetails ? (
-            <div className="py-8 text-center text-xs text-slate-400">Loading details...</div>
-          ) : (
-            <div className="space-y-5 text-xs">
-              {/* Load Top Info */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded border border-slate-200">
-                <div>
-                  <div className="text-[10px] text-slate-400 uppercase font-semibold">Supplier</div>
-                  <div className="font-bold text-slate-900 truncate">{loadDetails.supplierName}</div>
-                  <div className="text-[10px] text-slate-500">{loadDetails.supplierPhone || '-'}</div>
+          <div className="space-y-5 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#F8F9FA] dark:bg-[#20242A] p-4 rounded-[16px] border border-[#E3E6E8] dark:border-[#2A2F35]">
+              <div>
+                <div className="text-[10px] text-[#636B76] dark:text-[#8A929C] uppercase font-bold">
+                  Supplier
                 </div>
-
-                <div>
-                  <div className="text-[10px] text-slate-400 uppercase font-semibold">Billed Weight</div>
-                  <div className="font-bold text-slate-900 font-mono">
-                    {formatNumber(loadDetails.totalWeightKg)} KG
-                  </div>
-                  <div className="text-[10px] text-slate-500">
-                    @ {formatPKR(loadDetails.purchaseRatePerKg)} / KG
-                  </div>
+                <div className="font-bold truncate mt-0.5">{loadDetails.supplierName}</div>
+                <div className="text-[11px] text-[#636B76]">{loadDetails.supplierPhone || '-'}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-[#636B76] dark:text-[#8A929C] uppercase font-bold">
+                  Weight
                 </div>
+                <div className="font-bold font-mono mt-0.5">
+                  {formatNumber(loadDetails.totalWeightKg)} KG
+                </div>
+                <div className="text-[11px] text-[#636B76]">
+                  @ {formatPKR(loadDetails.purchaseRatePerKg)}/KG
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-[#636B76] dark:text-[#8A929C] uppercase font-bold">
+                  Bird Bill
+                </div>
+                <div className="font-bold font-mono mt-0.5">
+                  {formatPKR(loadDetails.purchaseAmount)}
+                </div>
+                <div className="text-[11px] text-[#636B76]">{formatDate(loadDetails.purchaseDate)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-[#636B76] dark:text-[#8A929C] uppercase font-bold">
+                  Truck & Driver
+                </div>
+                <div className="font-bold font-mono mt-0.5">
+                  {loadDetails.vehicleNumber || 'No truck #'}
+                </div>
+                <div className="text-[11px] text-[#636B76]">{loadDetails.driverName || '-'}</div>
+              </div>
+            </div>
 
+            <div
+              className={`p-3.5 rounded-[14px] border flex flex-wrap items-center justify-between gap-2 ${
+                loadDetails.stockBatch
+                  ? 'bg-[#92E2B3]/20 border-[#92E2B3]/40 text-emerald-950 dark:text-[#92E2B3]'
+                  : 'bg-[#F6E7A1]/30 border-[#F6E7A1]/50 text-amber-950 dark:text-[#F6E7A1]'
+              }`}
+            >
+              <div>
+                <div className="font-bold flex items-center gap-1.5">
+                  {loadDetails.stockBatch ? (
+                    <CheckCircle2 className="w-4 h-4 text-[#2FB67C]" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                  )}
+                  {loadDetails.stockBatch
+                    ? `In Stock: ${loadDetails.stockBatch.batchNumber}`
+                    : 'Birds Not Counted Yet'}
+                </div>
+                {loadDetails.stockBatch && (
+                  <div className="text-[11px] mt-0.5 opacity-90">
+                    Unloaded: {loadDetails.stockBatch.receivedPieces} · Dead:{' '}
+                    {loadDetails.stockBatch.deadPieces} · Healthy:{' '}
+                    <strong>{loadDetails.stockBatch.originalSaleablePieces}</strong> (
+                    {loadDetails.stockBatch.remainingPieces} left)
+                  </div>
+                )}
+              </div>
+
+              {!loadDetails.stockBatch && (
+                <button
+                  type="button"
+                  onClick={() => openReceivingForm(loadDetails)}
+                  className="px-3.5 py-1.5 bg-[#D4F56B] text-[#14161A] font-bold rounded-full text-xs cursor-pointer"
+                >
+                  Count Birds Now
+                </button>
+              )}
+            </div>
+
+            <div className="bg-[#F8F9FA] dark:bg-[#20242A] text-[#14161A] dark:text-[#F2F4F5] p-5 rounded-[18px] border border-[#E3E6E8] dark:border-[#2A2F35]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <div className="text-[10px] text-slate-400 uppercase font-semibold">Purchase Cost</div>
-                  <div className="font-bold text-slate-900 font-mono">
+                  <span className="text-[10px] uppercase font-bold text-[#636B76] dark:text-[#8A929C] tracking-wider">
+                    Bird Bill
+                  </span>
+                  <div className="text-lg font-black text-[#14161A] dark:text-white font-mono mt-0.5">
                     {formatPKR(loadDetails.purchaseAmount)}
                   </div>
-                  <div className="text-[10px] text-slate-500">Date: {formatDate(loadDetails.purchaseDate)}</div>
                 </div>
-
                 <div>
-                  <div className="text-[10px] text-slate-400 uppercase font-semibold">Vehicle & Driver</div>
-                  <div className="font-bold text-slate-900 font-mono">
-                    {loadDetails.vehicleNumber || 'No vehicle'}
+                  <span className="text-[10px] uppercase font-bold text-[#636B76] dark:text-[#8A929C] tracking-wider">
+                    Truck Costs (+)
+                  </span>
+                  <div className="text-lg font-black text-[#D9822B] dark:text-[#F6E7A1] font-mono mt-0.5">
+                    {formatPKR(loadDetails.totalExpenses || 0)}
                   </div>
-                  <div className="text-[10px] text-slate-500">{loadDetails.driverName || 'No driver'}</div>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#636B76] dark:text-[#8A929C] tracking-wider">
+                    Total Truck Cost (=)
+                  </span>
+                  <div className="text-lg font-black text-[#2FB67C] dark:text-[#D4F56B] font-mono mt-0.5">
+                    {formatPKR(loadDetails.totalLandedCost || loadDetails.purchaseAmount)}
+                  </div>
                 </div>
               </div>
 
-              {/* Stock Receiving Status Banner */}
-              <div
-                className={`p-3 rounded border flex items-center justify-between ${
-                  loadDetails.stockBatch
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                    : 'bg-amber-50 border-amber-200 text-amber-900'
-                }`}
+              {loadDetails.stockBatch && (
+                <div className="mt-3 pt-3 border-t border-[#E3E6E8] dark:border-[#2A2F35] flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-[#636B76] dark:text-[#8A929C]">
+                    Final Cost Per Healthy Bird (divided by {loadDetails.stockBatch.originalSaleablePieces} birds):
+                  </span>
+                  <span className="text-sm font-black text-[#2FB67C] dark:text-[#D4F56B] font-mono">
+                    {formatPKR(loadDetails.stockBatch.costPerPiece)} / bird
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[18px] overflow-hidden">
+              <div className="px-4 py-3 bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-between">
+                <span className="font-bold uppercase tracking-wider text-[11px]">
+                  Fuel, Loading & Driver Expenses
+                </span>
+                <span className="font-mono font-black text-[#14161A] dark:text-[#D4F56B]">
+                  Total: {formatPKR(loadDetails.totalExpenses || 0)}
+                </span>
+              </div>
+
+              <div className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
+                {(loadDetails.expenses || []).length === 0 ? (
+                  <div className="py-5 text-center text-[#636B76] dark:text-[#8A929C]">
+                    No truck expenses added yet.
+                  </div>
+                ) : (
+                  (loadDetails.expenses || []).map((exp) => (
+                    <div
+                      key={exp.id}
+                      className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-[#F8F9FA] dark:hover:bg-[#20242A]"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-semibold text-[#14161A] dark:text-white">
+                          {exp.category}{' '}
+                          <span className="font-normal text-[#636B76] dark:text-[#8A929C]">
+                            · {formatDate(exp.expenseDate)}
+                          </span>
+                        </div>
+                        {exp.description && (
+                          <div className="text-[11px] text-[#636B76] dark:text-[#8A929C] truncate">
+                            {exp.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono font-bold">{formatPKR(exp.amount)}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteExpense(exp.id)}
+                          className={`px-2 py-1 rounded-full text-[10px] font-bold transition cursor-pointer ${
+                            confirmDeleteExpId === exp.id
+                              ? 'bg-rose-600 text-white'
+                              : 'text-[#636B76] hover:text-rose-600'
+                          }`}
+                        >
+                          {confirmDeleteExpId === exp.id ? (
+                            'Confirm?'
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <form
+                onSubmit={handleAddLoadExpense}
+                className="p-3.5 bg-[#F8F9FA] dark:bg-[#20242A] border-t border-[#E3E6E8] dark:border-[#2A2F35] grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"
               >
-                <div>
-                  <div className="font-bold flex items-center">
-                    {loadDetails.stockBatch ? (
-                      <CheckCircle2 className="w-4 h-4 mr-1 text-emerald-600" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 mr-1 text-amber-600" />
-                    )}
-                    {loadDetails.stockBatch
-                      ? `Batch Created: ${loadDetails.stockBatch.batchNumber}`
-                      : 'Stock Not Received Yet'}
-                  </div>
-                  {loadDetails.stockBatch && (
-                    <div className="text-[11px] text-emerald-800 mt-0.5">
-                      Received: {loadDetails.stockBatch.receivedPieces} pcs | Dead:{' '}
-                      {loadDetails.stockBatch.deadPieces} | Damaged:{' '}
-                      {loadDetails.stockBatch.damagedPieces} |{' '}
-                      <strong>Saleable: {loadDetails.stockBatch.originalSaleablePieces} pcs</strong> (
-                      {loadDetails.stockBatch.remainingPieces} remaining)
-                    </div>
-                  )}
-                </div>
-
-                {!loadDetails.stockBatch && (
-                  <button
-                    onClick={() => openReceivingForm(loadDetails)}
-                    className="px-3 py-1 bg-emerald-600 text-white font-bold rounded text-xs hover:bg-emerald-700 shadow-xs"
-                  >
-                    Receive Stock Now
-                  </button>
-                )}
-              </div>
-
-              {/* Financial Landed Cost Box */}
-              <div className="bg-[#14161A] text-[#F2F4F5] p-5 rounded-[18px] border border-[#2A2F35] shadow-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-[#8A929C] tracking-wider">
-                      Total Purchase (PKR)
-                    </span>
-                    <div className="text-lg font-black text-white font-mono mt-0.5">
-                      {formatPKR(loadDetails.purchaseAmount)}
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-[#8A929C] tracking-wider">
-                      Total Load Expenses (+)
-                    </span>
-                    <div className="text-lg font-black text-[#F6E7A1] font-mono mt-0.5">
-                      {formatPKR(loadDetails.totalExpenses || 0)}
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-[#8A929C] tracking-wider">
-                      Total Landed Cost (=)
-                    </span>
-                    <div className="text-lg font-black text-[#D4F56B] font-mono mt-0.5">
-                      {formatPKR(loadDetails.totalLandedCost || loadDetails.purchaseAmount)}
-                    </div>
-                  </div>
-                </div>
-
-                {loadDetails.stockBatch && (
-                  <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between">
-                    <span className="text-xs text-[#8A929C]">
-                      Cost Per Saleable Piece (Landed Cost ÷ {loadDetails.stockBatch.originalSaleablePieces} pcs):
-                    </span>
-                    <span className="text-sm font-black text-[#D4F56B] font-mono">
-                      {formatPKR(loadDetails.stockBatch.costPerPiece)} / piece
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Load Expenses Section */}
-              <div className="border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[18px] overflow-hidden">
-                <div className="px-4 py-3 bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-between">
-                  <span className="font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider text-[11px]">
-                    Vehicle & Transit Expenses
-                  </span>
-                  <span className="text-xs font-mono font-black text-[#14161A] dark:text-[#D4F56B]">
-                    Total: {formatPKR(loadDetails.totalExpenses || 0)}
-                  </span>
-                </div>
-
-                {/* Expenses Table */}
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-slate-500 bg-slate-50/50">
-                      <th className="py-2 px-3">Category</th>
-                      <th className="py-2 px-3">Date</th>
-                      <th className="py-2 px-3">Description</th>
-                      <th className="py-2 px-3 text-right">Amount</th>
-                      <th className="py-2 px-3 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(loadDetails.expenses || []).length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-4 text-center text-slate-400">
-                          No transit expenses recorded yet. Use the form below to add fuel, driver bhatta, etc.
-                        </td>
-                      </tr>
-                    ) : (
-                      (loadDetails.expenses || []).map((exp) => (
-                        <tr key={exp.id} className="hover:bg-slate-50">
-                          <td className="py-2 px-3 font-semibold text-slate-800">
-                            {exp.category}
-                          </td>
-                          <td className="py-2 px-3 text-slate-600">{formatDate(exp.expenseDate)}</td>
-                          <td className="py-2 px-3 text-slate-500">{exp.description || '-'}</td>
-                          <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
-                            {formatPKR(exp.amount)}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <button
-                              onClick={() => handleDeleteExpense(exp.id)}
-                              className="text-slate-400 hover:text-rose-600 p-1"
-                              title="Delete expense"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-
-                {/* Add Expense Mini-Form */}
-                <form
-                  onSubmit={handleAddLoadExpense}
-                  className="p-3 bg-slate-50/80 border-t border-slate-200 flex flex-wrap items-center gap-2"
-                >
-                  <select
+                <div className="sm:col-span-3">
+                  <Select
+                    size="sm"
                     value={expenseCategory}
-                    onChange={(e) => setExpenseCategory(e.target.value)}
-                    className="px-2 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
-                  >
-                    <option value="Fuel">Fuel (Diesel)</option>
-                    <option value="Transportation">Transportation Fare</option>
-                    <option value="Loading">Farm Loading</option>
-                    <option value="Unloading">Shop Unloading</option>
-                    <option value="Driver Expense">Driver Bhatta & Food</option>
-                    <option value="Other">Other Expense</option>
-                  </select>
-
+                    onChange={setExpenseCategory}
+                    options={EXPENSE_CAT_OPTIONS}
+                  />
+                </div>
+                <div className="sm:col-span-2">
                   <input
                     type="number"
-                    placeholder="Amount PKR"
+                    placeholder="Amount"
                     value={expenseAmount}
                     onChange={(e) => setExpenseAmount(e.target.value)}
-                    className="w-28 px-2 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800 font-mono"
+                    className="w-full min-h-[38px] px-3 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F] font-mono"
                     required
                     min="1"
                   />
-
+                </div>
+                <div className="sm:col-span-3">
                   <input
                     type="date"
                     value={expenseDate}
                     onChange={(e) => setExpenseDate(e.target.value)}
-                    className="px-2 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
+                    className="w-full min-h-[38px] px-2.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F]"
                   />
-
+                </div>
+                <div className="sm:col-span-2">
                   <input
                     type="text"
-                    placeholder="Description (optional)"
+                    placeholder="Note"
                     value={expenseDesc}
                     onChange={(e) => setExpenseDesc(e.target.value)}
-                    className="flex-1 min-w-[120px] px-2 py-1.5 text-xs border border-slate-300 rounded bg-white text-slate-800"
+                    className="w-full min-h-[38px] px-2.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F]"
                   />
-
+                </div>
+                <div className="sm:col-span-2">
                   <button
                     type="submit"
-                    disabled={addingExpense}
-                    className="px-3 py-1.5 text-xs font-bold rounded bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50"
+                    className="w-full min-h-[38px] px-3 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
                   >
-                    {addingExpense ? 'Adding...' : 'Add Expense'}
+                    + Add
                   </button>
-                </form>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedLoadId(null);
-                    setLoadDetails(null);
-                  }}
-                  className="px-4 py-1.5 text-xs font-medium border border-slate-300 rounded bg-white text-slate-700 hover:bg-slate-50"
-                >
-                  Close
-                </button>
-              </div>
+                </div>
+              </form>
             </div>
-          )}
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedLoadId(null)}
+                className="min-h-[40px] px-5 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>
