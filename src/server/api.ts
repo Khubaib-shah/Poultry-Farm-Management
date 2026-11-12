@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { db } from '../db/index.ts';
+import { ensureSchema } from '../db/ensureSchema.ts';
 import {
   suppliers,
   vehicles,
@@ -30,6 +31,15 @@ import {
 export const apiRouter = express.Router();
 
 apiRouter.use(express.json());
+apiRouter.use(async (_req, res, next) => {
+  try {
+    await ensureSchema();
+    next();
+  } catch (error: any) {
+    console.error('Database schema initialization failed:', error);
+    res.status(500).json({ error: error?.message || 'Database initialization failed' });
+  }
+});
 
 // Helper to format Date to YYYY-MM-DD in Pakistan Standard Time (UTC+5)
 export function getPakistanDate(d: Date = new Date()): string {

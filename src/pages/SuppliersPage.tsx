@@ -47,25 +47,42 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
   const [openingBalance, setOpeningBalance] = useState('0');
   const [notes, setNotes] = useState('');
 
-  const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [accountModalSupplierId, setAccountModalSupplierId] = useState<number | null>(null);
+  const [payModalSupplierId, setPayModalSupplierId] = useState<number | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(() => getLocalPakistanDate());
   const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');
   const [paymentNotes, setPaymentNotes] = useState('');
 
-  const selectedSupplier = useMemo(
-    () => (selectedSupplierId ? suppliers.find((s) => s.id === selectedSupplierId) || null : null),
-    [suppliers, selectedSupplierId]
+  const accountSupplier = useMemo(
+    () =>
+      accountModalSupplierId
+        ? suppliers.find((s) => s.id === accountModalSupplierId) || null
+        : null,
+    [suppliers, accountModalSupplierId]
+  );
+
+  const paySupplier = useMemo(
+    () =>
+      payModalSupplierId
+        ? suppliers.find((s) => s.id === payModalSupplierId) || null
+        : null,
+    [suppliers, payModalSupplierId]
   );
 
   const supplierLedger = useMemo(() => {
-    if (!selectedSupplierId) return { ledger: [], totalDebit: 0, totalCredit: 0 };
-    const txs = dealerTransactions.filter((t) => t.supplierId === selectedSupplierId);
+    if (!accountModalSupplierId) return { ledger: [], totalDebit: 0, totalCredit: 0 };
+    const txs = dealerTransactions.filter((t) => t.supplierId === accountModalSupplierId);
     const totalDebit = txs.reduce((s, t) => s + Number(t.debitAmount || 0), 0);
     const totalCredit = txs.reduce((s, t) => s + Number(t.creditAmount || 0), 0);
     return { ledger: txs, totalDebit, totalCredit };
-  }, [dealerTransactions, selectedSupplierId]);
+  }, [dealerTransactions, accountModalSupplierId]);
+
+  const closePayModal = () => {
+    setPayModalSupplierId(null);
+    setPaymentAmount('');
+    setPaymentNotes('');
+  };
 
   const handleCreateSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,20 +118,19 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSupplierId || !paymentAmount || parseFloat(paymentAmount) <= 0) {
+    if (!payModalSupplierId || !paymentAmount || parseFloat(paymentAmount) <= 0) {
       onShowToast('Please enter a valid payment amount', 'error');
       return;
     }
 
+    const targetSupplierId = payModalSupplierId;
     const amt = parseFloat(paymentAmount);
     const notesVal = paymentNotes || 'Supplier payment';
-    setIsPaymentOpen(false);
-    setPaymentAmount('');
-    setPaymentNotes('');
+    closePayModal();
 
     try {
       await recordSupplierPayment({
-        supplierId: selectedSupplierId,
+        supplierId: targetSupplierId,
         amount: amt,
         transactionDate: paymentDate,
         paymentMethod,
@@ -340,7 +356,10 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
               <div className="flex items-center gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => setSelectedSupplierId(sup.id)}
+                  onClick={() => {
+                    setPayModalSupplierId(null);
+                    setAccountModalSupplierId(sup.id);
+                  }}
                   className="flex-1 min-h-[38px] py-1.5 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] transition cursor-pointer"
                 >
                   View Account
@@ -348,8 +367,8 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedSupplierId(sup.id);
-                    setIsPaymentOpen(true);
+                    setAccountModalSupplierId(null);
+                    setPayModalSupplierId(sup.id);
                   }}
                   className="min-h-[38px] px-4 py-1.5 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition cursor-pointer"
                 >
@@ -452,11 +471,11 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
       </Modal>
 
       {/* MODAL 2: SUPPLIER ACCOUNT HISTORY */}
-      {selectedSupplier && !isPaymentOpen && (
+      {accountSupplier && !paySupplier && (
         <Modal
-          isOpen={Boolean(selectedSupplier && !isPaymentOpen)}
-          onClose={() => setSelectedSupplierId(null)}
-          title={`Account: ${selectedSupplier.name}`}
+          isOpen={Boolean(accountSupplier && !paySupplier)}
+          onClose={() => setAccountModalSupplierId(null)}
+          title={`Account: ${accountSupplier.name}`}
           subtitle="Bills, payments sent, and remaining balance"
           maxWidth="2xl"
         >
@@ -465,7 +484,7 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
               <div>
                 <span className="text-[10px] text-[#636B76] uppercase font-bold">Old Balance</span>
                 <div className="font-bold font-mono mt-0.5">
-                  {formatPKR(selectedSupplier.openingBalance)}
+                  {formatPKR(accountSupplier.openingBalance)}
                 </div>
               </div>
               <div>
@@ -483,7 +502,7 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
               <div>
                 <span className="text-[10px] text-[#636B76] uppercase font-bold">Owed Now</span>
                 <div className="font-black font-mono text-[#F5B544] text-sm mt-0.5">
-                  {formatPKR(selectedSupplier.currentBalance)}
+                  {formatPKR(accountSupplier.currentBalance)}
                 </div>
               </div>
             </div>
@@ -494,7 +513,7 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
               </span>
               <button
                 type="button"
-                onClick={() => setIsPaymentOpen(true)}
+                onClick={() => setPayModalSupplierId(accountSupplier.id)}
                 className="px-4 py-1.5 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] cursor-pointer"
               >
                 + Record Payment
@@ -540,7 +559,7 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
             <div className="pt-2 flex justify-end">
               <button
                 type="button"
-                onClick={() => setSelectedSupplierId(null)}
+                onClick={() => setAccountModalSupplierId(null)}
                 className="min-h-[40px] px-5 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
               >
                 Close
@@ -552,9 +571,9 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
 
       {/* MODAL 3: RECORD SUPPLIER PAYMENT */}
       <Modal
-        isOpen={isPaymentOpen}
-        onClose={() => setIsPaymentOpen(false)}
-        title={`Pay ${selectedSupplier?.name || 'Supplier'}`}
+        isOpen={Boolean(paySupplier)}
+        onClose={closePayModal}
+        title={`Pay ${paySupplier?.name || 'Supplier'}`}
         subtitle="Subtracts payment from what you owe this dealer"
         maxWidth="md"
       >
@@ -606,7 +625,7 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
           <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
-              onClick={() => setIsPaymentOpen(false)}
+              onClick={closePayModal}
               className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
             >
               Cancel
