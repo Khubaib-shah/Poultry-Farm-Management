@@ -54,7 +54,7 @@ export const Modal: React.FC<ModalProps> = ({
             exit={{ opacity: 0, y: 24, scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 420, damping: 32 }}
             onClick={(e) => e.stopPropagation()}
-            className={`bg-white dark:bg-[#181B1F] rounded-t-[24px] sm:rounded-[22px] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-2xl w-full ${widthClasses[maxWidth]} max-h-[90vh] flex flex-col overflow-hidden`}
+            className={`bg-white dark:bg-[#181B1F] rounded-t-[24px] sm:rounded-[22px] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-2xl w-full max-w-full ${widthClasses[maxWidth]} max-h-[90vh] flex flex-col overflow-hidden`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="modal-title"
@@ -87,7 +87,7 @@ export const Modal: React.FC<ModalProps> = ({
             </div>
 
             {/* Scrollable Body */}
-            <div className="p-5 sm:p-6 overflow-y-auto flex-1 text-[#14161A] dark:text-[#F2F4F5]">
+            <div className="p-4 sm:p-6 overflow-y-auto overflow-x-hidden flex-1 min-w-0 text-[#14161A] dark:text-[#F2F4F5]">
               {children}
             </div>
           </motion.div>

@@ -209,32 +209,32 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
   ];
 
   const inputCls =
-    'w-full min-h-[42px] px-4 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
+    'w-full min-w-0 max-w-full block min-h-[42px] px-4 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
 
   return (
     <div className="w-full space-y-4 sm:space-y-6">
       {/* Fast Sales Entry Card */}
-      <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-4 sm:p-6 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between pb-3.5 border-b border-[#E3E6E8] dark:border-[#2A2F35] gap-3">
-          <div>
+      <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-4 sm:p-6 shadow-xs overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-[#E3E6E8] dark:border-[#2A2F35] gap-2.5 sm:gap-3">
+          <div className="min-w-0">
             <h2 className="text-base sm:text-lg leading-tight font-bold text-[#14161A] dark:text-[#F2F4F5] flex items-center">
-              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-[#14161A] dark:text-[#D4F56B]" />
-              New Walk-in Sale
+              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 mr-2 shrink-0 text-[#14161A] dark:text-[#D4F56B]" />
+              <span className="truncate">New Walk-in Sale</span>
             </h2>
             <p className="text-xs text-[#4A515B] dark:text-[#A3AAB3] mt-0.5">
               Enter birds sold and cash received — oldest stock is subtracted automatically
             </p>
           </div>
 
-          <div className="hidden xl:flex items-center space-x-2 bg-[#A9C8FA] text-[#14161A] px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-xs">
-            <span>Available Stock:</span>
-            <span className="font-mono font-black text-sm">{formatNumber(availableStock)} birds</span>
+          <div className="inline-flex self-start sm:self-auto items-center space-x-2 bg-[#A9C8FA] text-[#14161A] px-3 py-1.5 rounded-full text-xs font-semibold shadow-xs shrink-0">
+            <span>Stock:</span>
+            <span className="font-mono font-black text-xs sm:text-sm">{formatNumber(availableStock)} birds</span>
           </div>
         </div>
 
-        <form onSubmit={handleCreateSale} className="mt-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
+        <form onSubmit={handleCreateSale} className="mt-4 sm:mt-5 space-y-3.5 sm:space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
+            <div className="min-w-0">
               <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
                 Sale Date *
               </label>
@@ -247,7 +247,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
                 Birds Sold *
               </label>
@@ -259,15 +259,15 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
                 required
                 min="1"
                 max={availableStock > 0 ? availableStock : 1}
-                className={`${inputCls} text-sm font-bold font-mono`}
+                className={`${inputCls} sm:text-sm font-bold font-mono`}
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
                 Total Cash (PKR) *
               </label>
-              <div className="relative">
+              <div className="relative min-w-0">
                 <input
                   type="number"
                   placeholder="e.g. 92500"
@@ -275,15 +275,17 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
                   onChange={(e) => setTotalSaleAmount(e.target.value)}
                   required
                   min="1"
-                  className={`${inputCls} text-sm font-bold font-mono pr-12`}
+                  className={`${inputCls} sm:text-sm font-bold font-mono pr-12`}
                 />
-                <span className="absolute right-4 top-3 text-xs text-[#636B76] font-bold">PKR</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-[#636B76] font-bold pointer-events-none">
+                  PKR
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-            <div className="sm:col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 items-center">
+            <div className="sm:col-span-2 min-w-0">
               <label className="block text-xs font-semibold text-[#4A515B] dark:text-[#A3AAB3] mb-1.5">
                 Notes (Optional)
               </label>
@@ -296,7 +298,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
               />
             </div>
 
-            <div className="bg-[#F8F9FA] dark:bg-[#20242A] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] px-4 min-h-[42px] text-xs flex items-center justify-between sm:mt-6">
+            <div className="min-w-0 bg-[#F8F9FA] dark:bg-[#20242A] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] px-4 min-h-[42px] text-xs flex items-center justify-between gap-2 sm:mt-6">
               <span className="text-[#636B76] dark:text-[#8A929C] font-semibold">Price / Bird:</span>
               <span className="font-mono font-black text-[#14161A] dark:text-[#D4F56B] text-sm">
                 {livePricePerPiece > 0 ? formatPKR(livePricePerPiece) : '-'}

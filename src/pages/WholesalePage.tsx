@@ -234,7 +234,7 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
   ];
 
   const inputCls =
-    'w-full min-h-[42px] px-3.5 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
+    'w-full min-w-0 max-w-full block min-h-[42px] px-3.5 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
 
   return (
     <div className="w-full space-y-4 sm:space-y-6">
@@ -451,7 +451,7 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-bold mb-1.5">Delivery Date *</label>
             <input
               type="date"
@@ -463,7 +463,7 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-bold mb-1.5">Birds Sent *</label>
               <input
                 type="number"
@@ -480,7 +480,7 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
               </span>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-bold mb-1.5">Total Bill (PKR) *</label>
               <input
                 type="number"

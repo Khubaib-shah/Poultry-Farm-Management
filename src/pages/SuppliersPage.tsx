@@ -167,7 +167,7 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
   const totalOwedAll = suppliers.reduce((sum, s) => sum + Number(s.currentBalance || 0), 0);
 
   const inputCls =
-    'w-full min-h-[42px] px-3.5 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
+    'w-full min-w-0 max-w-full block min-h-[42px] px-3.5 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
 
   return (
     <div className="w-full space-y-4 sm:space-y-6">
@@ -588,7 +588,7 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
         maxWidth="md"
       >
         <form onSubmit={handleRecordPayment} className="space-y-4">
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-bold mb-1.5">Payment Date *</label>
             <input
               type="date"

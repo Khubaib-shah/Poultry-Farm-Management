@@ -9,9 +9,10 @@ import {
   Users,
   DollarSign,
   Check,
+  ChevronDown,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { computeReportFromCollections, getLocalPakistanDate } from '../utils/syncCalculations.ts';
@@ -48,6 +49,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
   >('sales');
   const [saleTypeFilter, setSaleTypeFilter] = useState('ALL');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('ALL');
+  const [isMobilePeriodOpen, setIsMobilePeriodOpen] = useState(false);
 
   const handleSelectPreset = (type: 'today' | 'yesterday' | 'weekly' | 'monthly' | 'all') => {
     setRangeType(type);
@@ -582,26 +584,58 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             <span className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5]">Period:</span>
           </div>
 
-          {/* Mobile: Vertical List (no pill overflow) */}
-          <div className="md:hidden w-full rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#1F2328] divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] overflow-hidden">
-            {periodPresets.map((btn) => {
-              const active = rangeType === btn.id;
-              return (
-                <button
-                  key={btn.id}
-                  type="button"
-                  onClick={() => handleSelectPreset(btn.id)}
-                  className={`w-full px-3.5 py-2.5 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                    active
-                      ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
-                      : 'text-[#4A515B] dark:text-[#A3AAB3]'
-                  }`}
+          {/* Mobile: Collapsible Period Selector */}
+          <div className="md:hidden w-full rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#1F2328] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setIsMobilePeriodOpen((v) => !v)}
+              aria-expanded={isMobilePeriodOpen}
+              className="w-full px-3.5 py-2.5 text-xs font-semibold flex items-center justify-between text-[#14161A] dark:text-[#F2F4F5] cursor-pointer"
+            >
+              <span>
+                {periodPresets.find((p) => p.id === rangeType)?.label || 'Custom Dates'}
+              </span>
+              <ChevronDown
+                className={`w-4 h-4 text-[#4A515B] dark:text-[#A3AAB3] transition-transform duration-200 ${
+                  isMobilePeriodOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+            <AnimatePresence initial={false}>
+              {isMobilePeriodOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="overflow-hidden border-t border-[#E3E6E8] dark:border-[#2A2F35] divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]"
                 >
-                  <span>{btn.label}</span>
-                  {active && <Check className="w-3.5 h-3.5 text-[#14161A] dark:text-[#D4F56B]" />}
-                </button>
-              );
-            })}
+                  {periodPresets.map((btn) => {
+                    const active = rangeType === btn.id;
+                    return (
+                      <button
+                        key={btn.id}
+                        type="button"
+                        onClick={() => {
+                          handleSelectPreset(btn.id);
+                          setIsMobilePeriodOpen(false);
+                        }}
+                        className={`w-full px-3.5 py-2.5 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
+                            : 'text-[#4A515B] dark:text-[#A3AAB3]'
+                        }`}
+                      >
+                        <span>{btn.label}</span>
+                        {active && (
+                          <Check className="w-3.5 h-3.5 text-[#14161A] dark:text-[#D4F56B]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Tablet / Desktop: Single-row Pills with Smooth Sliding Highlight */}
@@ -637,28 +671,32 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
           <span className="text-xs text-[#636B76] dark:text-[#8A929C] font-semibold shrink-0">
             Dates:
           </span>
-          <div className="grid grid-cols-2 md:flex md:items-center gap-2 w-full md:w-auto">
-            <input
-              type="date"
-              aria-label="Start date"
-              value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                setRangeType('custom');
-              }}
-              className="w-full md:w-auto min-h-[38px] px-3 py-1.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5]"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:items-center gap-2 w-full md:w-auto">
+            <div className="min-w-0">
+              <input
+                type="date"
+                aria-label="Start date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setRangeType('custom');
+                }}
+                className="w-full min-w-0 max-w-full block md:w-auto min-h-[38px] px-3 py-1.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5]"
+              />
+            </div>
             <span className="hidden md:inline text-[#636B76] dark:text-[#8A929C] text-xs">to</span>
-            <input
-              type="date"
-              aria-label="End date"
-              value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                setRangeType('custom');
-              }}
-              className="w-full md:w-auto min-h-[38px] px-3 py-1.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5]"
-            />
+            <div className="min-w-0">
+              <input
+                type="date"
+                aria-label="End date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setRangeType('custom');
+                }}
+                className="w-full min-w-0 max-w-full block md:w-auto min-h-[38px] px-3 py-1.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5]"
+              />
+            </div>
           </div>
         </div>
       </div>

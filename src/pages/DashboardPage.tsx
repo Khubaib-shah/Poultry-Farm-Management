@@ -8,11 +8,12 @@ import {
   ShoppingCart,
   Sparkles,
   ChevronRight,
+  ChevronDown,
   Plus,
   Calendar,
   Check,
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { computeDashboardFromCollections } from '../utils/syncCalculations.ts';
@@ -43,6 +44,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [customStart, setCustomStart] = useState<string>('');
   const [customEnd, setCustomEnd] = useState<string>('');
   const [showCustomDate, setShowCustomDate] = useState(false);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [selectedChartDate, setSelectedChartDate] = useState<string | null>(null);
 
   const chartDaysCount = chartTimeframe === '90D' ? 30 : chartTimeframe === '30D' ? 14 : 7;
@@ -134,46 +136,88 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
 
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 w-full xl:w-auto">
-          {/* Mobile: Vertical List (no overflowing pills) */}
-          <div className="sm:hidden bg-white dark:bg-[#181B1F] rounded-[18px] border border-[#E3E6E8] dark:border-[#2A2F35] divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] overflow-hidden shadow-xs">
-            {periodButtons.map((btn) => {
-              const active = period === btn.id && !showCustomDate;
-              return (
-                <button
-                  key={btn.id}
-                  type="button"
-                  onClick={() => {
-                    setPeriod(btn.id);
-                    setShowCustomDate(false);
-                  }}
-                  className={`w-full px-4 py-2.5 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                    active
-                      ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
-                      : 'text-[#4A515B] dark:text-[#A3AAB3]'
-                  }`}
-                >
-                  <span>{btn.label}</span>
-                  {active && <Check className="w-3.5 h-3.5 text-[#14161A] dark:text-[#D4F56B]" />}
-                </button>
-              );
-            })}
+          {/* Mobile: Collapsed Filter Card (Active Preset + Arrow corner, Pick Dates always visible) */}
+          <div className="sm:hidden bg-white dark:bg-[#181B1F] rounded-[18px] border border-[#E3E6E8] dark:border-[#2A2F35] overflow-hidden shadow-xs">
             <button
               type="button"
-              onClick={() => setShowCustomDate((v) => !v)}
-              className={`w-full px-4 py-2.5 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                period === 'custom' || showCustomDate
-                  ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
-                  : 'text-[#4A515B] dark:text-[#A3AAB3]'
-              }`}
+              onClick={() => setIsMobileFilterOpen((v) => !v)}
+              aria-expanded={isMobileFilterOpen}
+              aria-label="Toggle date filter options"
+              className="w-full px-4 py-2.5 text-xs font-semibold flex items-center justify-between text-[#14161A] dark:text-[#F2F4F5] cursor-pointer"
             >
-              <span className="flex items-center gap-2">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Pick Dates</span>
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="truncate">
+                  {period === 'custom' ? 'Today' : periodLabel}
+                </span>
               </span>
-              {(period === 'custom' || showCustomDate) && (
-                <Check className="w-3.5 h-3.5 text-[#14161A] dark:text-[#D4F56B]" />
-              )}
+              <span className="w-7 h-7 rounded-full bg-[#F3F5F6] dark:bg-[#20242A] flex items-center justify-center shrink-0">
+                <ChevronDown
+                  className={`w-4 h-4 text-[#4A515B] dark:text-[#A3AAB3] transition-transform duration-200 ${
+                    isMobileFilterOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </span>
             </button>
+
+            <AnimatePresence initial={false}>
+              {isMobileFilterOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="overflow-hidden border-t border-[#E3E6E8] dark:border-[#2A2F35] divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]"
+                >
+                  {periodButtons.map((btn) => {
+                    const active = period === btn.id && !showCustomDate;
+                    return (
+                      <button
+                        key={btn.id}
+                        type="button"
+                        onClick={() => {
+                          setPeriod(btn.id);
+                          setShowCustomDate(false);
+                          setIsMobileFilterOpen(false);
+                        }}
+                        className={`w-full px-4 py-2.5 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
+                            : 'text-[#4A515B] dark:text-[#A3AAB3]'
+                        }`}
+                      >
+                        <span>{btn.label}</span>
+                        {active && (
+                          <Check className="w-3.5 h-3.5 text-[#14161A] dark:text-[#D4F56B]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="border-t border-[#E3E6E8] dark:border-[#2A2F35]">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCustomDate((v) => !v);
+                  setIsMobileFilterOpen(false);
+                }}
+                className={`w-full px-4 py-2.5 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                  period === 'custom' || showCustomDate
+                    ? 'bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5]'
+                    : 'text-[#4A515B] dark:text-[#A3AAB3]'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Pick Dates</span>
+                </span>
+                {(period === 'custom' || showCustomDate) && (
+                  <Check className="w-3.5 h-3.5 text-[#14161A] dark:text-[#D4F56B]" />
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Tablet / Desktop: Single-row Pill Bar with Smooth Sliding Highlight */}
@@ -236,28 +280,38 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           {showCustomDate && (
             <form
               onSubmit={handleApplyCustomDate}
-              className="grid grid-cols-2 sm:flex sm:items-center gap-2 bg-white dark:bg-[#181B1F] p-3 sm:p-1.5 sm:px-3 rounded-[18px] sm:rounded-full border border-[#E3E6E8] dark:border-[#2A2F35]"
+              className="grid grid-cols-1 sm:flex sm:items-center gap-2.5 sm:gap-2 bg-white dark:bg-[#181B1F] p-3.5 sm:p-1.5 sm:px-3 rounded-[18px] sm:rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] overflow-hidden"
             >
-              <input
-                type="date"
-                aria-label="Start date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                required
-                className="text-xs bg-transparent text-[#14161A] dark:text-[#F2F4F5] focus:outline-none border sm:border-0 border-[#E3E6E8] dark:border-[#2A2F35] rounded-lg px-2 py-1.5 sm:p-0"
-              />
-              <span className="hidden sm:inline text-xs text-[#636B76]">to</span>
-              <input
-                type="date"
-                aria-label="End date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                required
-                className="text-xs bg-transparent text-[#14161A] dark:text-[#F2F4F5] focus:outline-none border sm:border-0 border-[#E3E6E8] dark:border-[#2A2F35] rounded-lg px-2 py-1.5 sm:p-0"
-              />
+              <div className="min-w-0">
+                <label className="sm:hidden block text-[10px] font-bold uppercase tracking-wider text-[#636B76] dark:text-[#8A929C] mb-1">
+                  From
+                </label>
+                <input
+                  type="date"
+                  aria-label="Start date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  required
+                  className="w-full min-w-0 max-w-full block min-h-[40px] sm:min-h-0 text-xs bg-[#F3F5F6]/70 sm:bg-transparent dark:bg-[#1F2328] sm:dark:bg-transparent text-[#14161A] dark:text-[#F2F4F5] focus:outline-none border sm:border-0 border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] sm:rounded-none px-3 py-2 sm:p-0"
+                />
+              </div>
+              <span className="hidden sm:inline text-xs text-[#636B76] shrink-0">to</span>
+              <div className="min-w-0">
+                <label className="sm:hidden block text-[10px] font-bold uppercase tracking-wider text-[#636B76] dark:text-[#8A929C] mb-1">
+                  To
+                </label>
+                <input
+                  type="date"
+                  aria-label="End date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  required
+                  className="w-full min-w-0 max-w-full block min-h-[40px] sm:min-h-0 text-xs bg-[#F3F5F6]/70 sm:bg-transparent dark:bg-[#1F2328] sm:dark:bg-transparent text-[#14161A] dark:text-[#F2F4F5] focus:outline-none border sm:border-0 border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] sm:rounded-none px-3 py-2 sm:p-0"
+                />
+              </div>
               <button
                 type="submit"
-                className="col-span-2 sm:col-span-1 px-3 py-1.5 sm:py-1 rounded-full bg-[#D4F56B] text-[#14161A] text-[11px] font-bold cursor-pointer"
+                className="w-full sm:w-auto min-h-[40px] sm:min-h-0 px-4 sm:px-3 py-2 sm:py-1 rounded-full bg-[#D4F56B] text-[#14161A] text-xs sm:text-[11px] font-bold cursor-pointer shrink-0"
               >
                 Apply
               </button>
@@ -482,8 +536,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     <span>0</span>
                   </div>
 
-                  <div className="flex-1 overflow-x-auto">
-                    <div className="h-56 flex items-end justify-between gap-1.5 sm:gap-2 pt-6 px-1 min-w-[360px] relative">
+                  <div className="flex-1 overflow-x-auto min-w-0">
+                    <div
+                      className={`h-56 flex items-end justify-between gap-1 sm:gap-2 pt-6 px-0.5 sm:px-1 relative ${
+                        dailyList.length > 7 ? 'min-w-[520px]' : 'w-full min-w-0'
+                      }`}
+                    >
                       {(charts.daily || []).map((day) => {
                         const revHeight =
                           day.revenue > 0
@@ -542,29 +600,49 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 </div>
 
                 {activeDay && (
-                  <div className="mt-3 p-3 rounded-[14px] bg-[#F8F9FA] dark:bg-[#20242A] border border-[#E3E6E8] dark:border-[#2A2F35] flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="mt-3 p-3.5 rounded-[14px] bg-[#F8F9FA] dark:bg-[#20242A] border border-[#E3E6E8] dark:border-[#2A2F35] flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2.5 text-xs">
                     <span className="font-mono font-bold text-[#14161A] dark:text-[#D4F56B]">
                       Day {activeDay.date} ({activeDay.piecesSold} birds)
                     </span>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono">
-                      <span>
-                        Sold: <strong>{formatPKR(activeDay.revenue)}</strong>
-                      </span>
-                      <span>
-                        Bird Cost: <strong>{formatPKR(activeDay.cogs)}</strong>
-                      </span>
-                      <span>
-                        Bills: <strong>{formatPKR(activeDay.expenses)}</strong>
-                      </span>
-                      <span
-                        className={`font-bold ${
-                          activeDay.netProfit >= 0
-                            ? 'text-[#2FB67C]'
-                            : 'text-[#D95C5C] dark:text-[#FF8585]'
-                        }`}
-                      >
-                        Profit: {formatSignedPKR(activeDay.netProfit)}
-                      </span>
+                    <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-x-4 gap-y-2 font-mono">
+                      <div className="flex flex-col sm:block">
+                        <span className="text-[10px] sm:text-xs text-[#636B76] dark:text-[#8A929C] font-sans sm:font-mono">
+                          Sold:{' '}
+                        </span>
+                        <strong className="text-[#14161A] dark:text-white">
+                          {formatPKR(activeDay.revenue)}
+                        </strong>
+                      </div>
+                      <div className="flex flex-col sm:block">
+                        <span className="text-[10px] sm:text-xs text-[#636B76] dark:text-[#8A929C] font-sans sm:font-mono">
+                          Bird Cost:{' '}
+                        </span>
+                        <strong className="text-[#14161A] dark:text-white">
+                          {formatPKR(activeDay.cogs)}
+                        </strong>
+                      </div>
+                      <div className="flex flex-col sm:block">
+                        <span className="text-[10px] sm:text-xs text-[#636B76] dark:text-[#8A929C] font-sans sm:font-mono">
+                          Bills:{' '}
+                        </span>
+                        <strong className="text-[#14161A] dark:text-white">
+                          {formatPKR(activeDay.expenses)}
+                        </strong>
+                      </div>
+                      <div className="flex flex-col sm:block">
+                        <span className="text-[10px] sm:text-xs text-[#636B76] dark:text-[#8A929C] font-sans sm:font-mono">
+                          Profit:{' '}
+                        </span>
+                        <span
+                          className={`font-bold ${
+                            activeDay.netProfit >= 0
+                              ? 'text-[#2FB67C]'
+                              : 'text-[#D95C5C] dark:text-[#FF8585]'
+                          }`}
+                        >
+                          {formatSignedPKR(activeDay.netProfit)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}

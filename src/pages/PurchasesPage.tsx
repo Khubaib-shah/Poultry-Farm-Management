@@ -394,7 +394,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
   const liveSaleable = calculateSaleablePieces(liveReceived, liveDead, liveDamaged);
 
   const inputCls =
-    'w-full min-h-[42px] px-3.5 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
+    'w-full min-w-0 max-w-full block min-h-[42px] px-3.5 py-2 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[14px] bg-[#F3F5F6]/70 dark:bg-[#1F2328] text-[#14161A] dark:text-[#F2F4F5] focus:outline-none focus:ring-2 focus:ring-[#D4F56B]';
   const labelCls = 'block text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] mb-1.5';
 
   return (
@@ -476,7 +476,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       >
         <form onSubmit={handleCreateLoad} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div className="min-w-0">
               <label className={labelCls}>Supplier (Farm Dealer) *</label>
               <Select
                 value={supplierId}
@@ -487,7 +487,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className={labelCls}>Purchase Date *</label>
               <input
                 type="date"
@@ -500,9 +500,9 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div className="min-w-0">
               <label className={labelCls}>Total Weight (KG) *</label>
-              <div className="relative">
+              <div className="relative min-w-0">
                 <input
                   type="number"
                   step="0.01"
@@ -512,15 +512,15 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                   required
                   className={`${inputCls} font-mono pr-10`}
                 />
-                <span className="absolute right-3.5 top-3 text-[11px] text-[#636B76] font-bold">
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[11px] text-[#636B76] font-bold pointer-events-none">
                   KG
                 </span>
               </div>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className={labelCls}>Supplier Bill Amount (PKR) *</label>
-              <div className="relative">
+              <div className="relative min-w-0">
                 <input
                   type="number"
                   step="1"
@@ -530,14 +530,14 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                   required
                   className={`${inputCls} font-mono pr-12`}
                 />
-                <span className="absolute right-3.5 top-3 text-[10px] text-[#636B76] font-bold">
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] text-[#636B76] font-bold pointer-events-none">
                   PKR
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="p-3.5 bg-[#F8F9FA] dark:bg-[#20242A] rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-between">
+          <div className="p-3.5 bg-[#F8F9FA] dark:bg-[#20242A] rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-between gap-2">
             <span className="text-xs text-[#636B76] dark:text-[#8A929C] font-semibold">
               Price per KG:
             </span>
@@ -547,7 +547,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div className="min-w-0">
               <label className={labelCls}>Truck Number</label>
               <input
                 type="text"
@@ -558,7 +558,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className={labelCls}>Driver Name</label>
               <input
                 type="text"
@@ -630,7 +630,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
             </div>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className={labelCls}>Arrival Date *</label>
             <input
               type="date"
@@ -641,7 +641,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className={labelCls}>Total Birds Counted *</label>
             <input
               type="number"
@@ -655,7 +655,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
+            <div className="min-w-0">
               <label className={labelCls}>Dead Birds</label>
               <input
                 type="number"
@@ -666,7 +666,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className={labelCls}>Damaged / Weak</label>
               <input
                 type="number"
@@ -917,7 +917,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                 onSubmit={handleAddLoadExpense}
                 className="p-3.5 bg-[#F8F9FA] dark:bg-[#20242A] border-t border-[#E3E6E8] dark:border-[#2A2F35] rounded-b-[17px] grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
               >
-                <div className="sm:col-span-5">
+                <div className="sm:col-span-5 min-w-0">
                   <Select
                     size="sm"
                     placement="up"
@@ -926,35 +926,35 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                     options={EXPENSE_CAT_OPTIONS}
                   />
                 </div>
-                <div className="sm:col-span-3">
+                <div className="sm:col-span-3 min-w-0">
                   <input
                     type="number"
                     placeholder="Amount (PKR)"
                     value={expenseAmount}
                     onChange={(e) => setExpenseAmount(e.target.value)}
-                    className="w-full min-h-[38px] px-3 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F] font-mono"
+                    className="w-full min-w-0 max-w-full block min-h-[38px] px-3 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F] font-mono"
                     required
                     min="1"
                   />
                 </div>
-                <div className="sm:col-span-4">
+                <div className="sm:col-span-4 min-w-0">
                   <input
                     type="date"
                     value={expenseDate}
                     onChange={(e) => setExpenseDate(e.target.value)}
-                    className="w-full min-h-[38px] px-2.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F]"
+                    className="w-full min-w-0 max-w-full block min-h-[38px] px-2.5 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F]"
                   />
                 </div>
-                <div className="sm:col-span-9">
+                <div className="sm:col-span-9 min-w-0">
                   <input
                     type="text"
                     placeholder="Note (optional)"
                     value={expenseDesc}
                     onChange={(e) => setExpenseDesc(e.target.value)}
-                    className="w-full min-h-[38px] px-3 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F]"
+                    className="w-full min-w-0 max-w-full block min-h-[38px] px-3 text-xs border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[12px] bg-white dark:bg-[#181B1F]"
                   />
                 </div>
-                <div className="sm:col-span-3">
+                <div className="sm:col-span-3 min-w-0">
                   <button
                     type="submit"
                     disabled={isAddingExpense}
