@@ -400,10 +400,10 @@ npm start
 
 ## 👨‍💻 About Me
 
-Hi, I'm **Khubaib Shah** (`bewithbaacha@gmail.com`) — a software engineer focused on building practical, resilient full-stack web applications that replace messy paper registers with fast, trustworthy software.
+Hi, I'm **Khubaib Shah** (`syedkhubaibshah@icloud.com`) — a software engineer focused on building practical, resilient full-stack web applications that replace messy paper registers with fast, trustworthy software.
 
 While building **Al-Madina Poultry**, my goal was to make real-world business accounting feel effortless on both a shop desktop and a counter operator's iPhone:
 - Designing **domain-accurate financial engines** (FIFO batch consumption, landed cost allocation, and non-double-counted dealer ledgers) backed by automated unit tests.
 - Obsessing over **perceived speed and mobile ergonomics** — optimistic UI updates, double-tap throttling, offline-capable PWA packaging, and responsive touch-friendly controls.
 
-If you'd like to collaborate, discuss system architecture, or customize this platform, feel free to reach out at **bewithbaacha@gmail.com**.
+If you'd like to collaborate, discuss system architecture, or customize this platform, feel free to reach out at **syedkhubaibshah@icloud.com**.
