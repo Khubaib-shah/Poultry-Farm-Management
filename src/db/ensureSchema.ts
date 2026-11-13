@@ -1,4 +1,5 @@
 import { createPool } from './index.ts';
+import { hashPassword } from '../utils/authCrypto.ts';
 
 declare global {
   var _schemaReadyPromise: Promise<void> | undefined;
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS "users" (
   "id" serial PRIMARY KEY NOT NULL,
   "uid" text NOT NULL UNIQUE,
   "email" text NOT NULL,
+  "password_hash" text,
   "name" text,
   "role" text DEFAULT 'admin' NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -212,6 +214,35 @@ export function ensureSchema(): Promise<void> {
       );
       if ((checkRes.rows[0]?.cnt ?? 0) < REQUIRED_TABLES.length) {
         await pool.query(SCHEMA_DDL);
+      }
+
+      // Ensure password_hash column exists on pre-existing databases
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password_hash" text;`);
+
+      // Idempotently ensure the owner@checkin.me user exists with a scrypt password hash
+      const existingOwner = await pool.query<{ id: number; password_hash: string | null }>(
+        `SELECT id, password_hash FROM "users" WHERE LOWER("email") = LOWER($1) LIMIT 1`,
+        ['owner@checkin.me']
+      );
+
+      if (existingOwner.rows.length === 0) {
+        const passwordHash = hashPassword('Owner1122@@');
+        await pool.query(
+          `INSERT INTO "users" ("uid", "email", "password_hash", "name", "role")
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT ("uid") DO UPDATE
+             SET "email" = EXCLUDED."email",
+                 "password_hash" = COALESCE("users"."password_hash", EXCLUDED."password_hash"),
+                 "name" = COALESCE("users"."name", EXCLUDED."name"),
+                 "role" = EXCLUDED."role"`,
+          ['owner-checkin-me', 'owner@checkin.me', passwordHash, 'Owner', 'owner']
+        );
+      } else if (!existingOwner.rows[0].password_hash) {
+        const passwordHash = hashPassword('Owner1122@@');
+        await pool.query(
+          `UPDATE "users" SET "password_hash" = $1, "name" = COALESCE("name", 'Owner'), "role" = 'owner' WHERE "id" = $2`,
+          [passwordHash, existingOwner.rows[0].id]
+        );
       }
     })().catch((err) => {
       global._schemaReadyPromise = undefined;

@@ -21,11 +21,13 @@ import {
   AlertCircle,
   RefreshCw,
   User,
+  LogOut,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useTheme } from '../../context/ThemeContext.tsx';
 import { getLocalPakistanDate } from '../../utils/syncCalculations.ts';
 import { PWAInstallButton } from '../common/PWAInstallButton.tsx';
+import { AuthUser } from '../../types/index.ts';
 
 export type NavItemKey =
   | 'dashboard'
@@ -50,6 +52,8 @@ interface FloatingIslandShellProps {
   onDismissError?: () => void;
   onRetrySync?: () => void;
   onQuickAction: (action: 'new-sale' | 'new-load' | 'calculator') => void;
+  currentUser?: AuthUser | null;
+  onLogout?: () => void;
   children: React.ReactNode;
 }
 
@@ -94,6 +98,8 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
   onDismissError,
   onRetrySync,
   onQuickAction,
+  currentUser,
+  onLogout,
   children,
 }) => {
   const { theme, toggleTheme } = useTheme();
@@ -243,11 +249,11 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                 className="absolute right-0 top-12 w-56 p-2 rounded-[18px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-xl z-50"
               >
                 <div className="p-2 border-b border-[#E3E6E8] dark:border-[#2A2F35]">
-                  <div className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5]">
-                    {businessName}
+                  <div className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] truncate">
+                    {currentUser?.name || businessName}
                   </div>
-                  <div className="text-[11px] text-[#636B76] dark:text-[#8A929C]">
-                    Farm & Shop Manager
+                  <div className="text-[11px] text-[#636B76] dark:text-[#8A929C] truncate">
+                    {currentUser?.email || 'Farm & Shop Manager'}
                   </div>
                 </div>
                 <div className="py-1 space-y-0.5">
@@ -276,6 +282,21 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                     onActionComplete={() => setProfileDropdownOpen(false)}
                   />
                 </div>
+                {onLogout && (
+                  <div className="pt-1 mt-1 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        onLogout();
+                      }}
+                      className="w-full flex items-center gap-2 text-left px-2.5 py-2 text-xs rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold transition cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -610,11 +631,31 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                 })}
               </div>
 
-              <div className="pt-2 pb-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
+              <div className="pt-2 pb-2 border-t border-[#E3E6E8] dark:border-[#2A2F35] space-y-1.5">
                 <PWAInstallButton
                   variant="menu-item"
                   onActionComplete={() => setMobileDrawerOpen(false)}
                 />
+                {onLogout && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileDrawerOpen(false);
+                      onLogout();
+                    }}
+                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-[14px] text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign Out</span>
+                    </span>
+                    {currentUser?.email && (
+                      <span className="text-[11px] font-medium text-[#636B76] dark:text-[#8A929C] truncate max-w-[140px]">
+                        {currentUser.email}
+                      </span>
+                    )}
+                  </button>
+                )}
               </div>
 
               <div className="pt-2 border-t border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-between">

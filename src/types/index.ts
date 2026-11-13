@@ -278,3 +278,11 @@ export interface AppSettings {
   examplePrice2: string;
   lowStockThreshold: string;
 }
+
+export interface AuthUser {
+  id: number;
+  uid: string;
+  email: string;
+  name: string | null;
+  role: string;
+}

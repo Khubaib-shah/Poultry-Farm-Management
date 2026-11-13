@@ -1,7 +1,8 @@
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import { db } from '../db/index.ts';
 import { ensureSchema } from '../db/ensureSchema.ts';
 import {
+  users,
   suppliers,
   vehicles,
   purchaseLoads,
@@ -27,6 +28,50 @@ import {
   consumeBatchesFifo,
   calculatePnl,
 } from '../utils/poultryMath.ts';
+import {
+  verifyPassword,
+  signSessionToken,
+  verifySessionToken,
+  extractTokenFromHeaders,
+  getSessionSecret,
+  SessionPayload,
+} from '../utils/authCrypto.ts';
+
+const SESSION_COOKIE_NAME = 'checkin_session';
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+
+function getAuthSecret(): string {
+  return getSessionSecret(
+    process.env.AUTH_SECRET || process.env.SESSION_SECRET,
+    process.env.DATABASE_URL
+  );
+}
+
+function formatSessionCookie(token: string, maxAgeSeconds: number, isSecure: boolean): string {
+  const parts = [
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${maxAgeSeconds}`,
+  ];
+  if (isSecure) {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
+}
+
+function resolveRequestSession(req: Request): SessionPayload | null {
+  const token = extractTokenFromHeaders(
+    {
+      authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+      cookie: typeof req.headers.cookie === 'string' ? req.headers.cookie : undefined,
+    },
+    SESSION_COOKIE_NAME
+  );
+  if (!token) return null;
+  return verifySessionToken(token, getAuthSecret());
+}
 
 export const apiRouter = express.Router();
 
@@ -50,7 +95,7 @@ export function getPakistanDate(d: Date = new Date()): string {
 }
 
 // -------------------------------------------------------------
-// 1. HEALTH & SETTINGS
+// 0. HEALTH & AUTHENTICATION (Public Endpoints)
 // -------------------------------------------------------------
 apiRouter.get('/health', async (_req: Request, res: Response) => {
   try {
@@ -61,6 +106,97 @@ apiRouter.get('/health', async (_req: Request, res: Response) => {
     res.status(500).json({ status: 'error', error: error.message });
   }
 });
+
+apiRouter.post('/auth/login', async (req: Request, res: Response) => {
+  try {
+    const rawEmail = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+    if (!rawEmail || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.email}) = ${rawEmail}`)
+      .limit(1);
+
+    if (!user || !verifyPassword(password, user.passwordHash)) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const sessionUser = {
+      id: user.id,
+      uid: user.uid,
+      email: user.email,
+      name: user.name || 'Owner',
+      role: user.role || 'owner',
+    };
+
+    const token = signSessionToken(sessionUser, getAuthSecret(), SESSION_TTL_SECONDS);
+    const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    res.setHeader('Set-Cookie', formatSessionCookie(token, SESSION_TTL_SECONDS, isSecure));
+
+    return res.json({
+      user: sessionUser,
+      token,
+    });
+  } catch (error: any) {
+    console.error('Login failed:', error);
+    return res.status(500).json({ error: 'Unable to sign in right now. Please try again.' });
+  }
+});
+
+apiRouter.post('/auth/logout', (req: Request, res: Response) => {
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('Set-Cookie', formatSessionCookie('', 0, isSecure));
+  return res.json({ success: true });
+});
+
+apiRouter.get('/auth/me', async (req: Request, res: Response) => {
+  try {
+    const session = resolveRequestSession(req);
+    if (!session) {
+      return res.json({ authenticated: false, user: null });
+    }
+
+    const [user] = await db
+      .select({
+        id: users.id,
+        uid: users.uid,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+      })
+      .from(users)
+      .where(eq(users.id, session.id))
+      .limit(1);
+
+    if (!user) {
+      return res.json({ authenticated: false, user: null });
+    }
+
+    return res.json({ authenticated: true, user });
+  } catch (error: any) {
+    console.error('Auth session check failed:', error);
+    return res.status(500).json({ error: 'Failed to verify session' });
+  }
+});
+
+// Protect all downstream business API routes
+apiRouter.use((req: Request, res: Response, next: NextFunction) => {
+  const session = resolveRequestSession(req);
+  if (!session) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  (req as Request & { authUser?: SessionPayload }).authUser = session;
+  next();
+});
+
+// -------------------------------------------------------------
+// 1. SETTINGS
+// -------------------------------------------------------------
 
 apiRouter.get('/settings', async (_req: Request, res: Response) => {
   try {

@@ -13,8 +13,9 @@ import {
 // 1. Users
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  uid: text('uid').notNull().unique(), // Firebase Auth UID
+  uid: text('uid').notNull().unique(),
   email: text('email').notNull(),
+  passwordHash: text('password_hash'),
   name: text('name'),
   role: text('role').default('admin').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

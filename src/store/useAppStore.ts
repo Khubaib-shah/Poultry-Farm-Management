@@ -68,6 +68,7 @@ interface AppStore extends CoreDataState {
   bootstrap: (options?: { force?: boolean; silent?: boolean }) => Promise<void>;
   refreshInBackground: () => Promise<void>;
   seedDemoData: (force?: boolean) => Promise<void>;
+  resetStore: () => void;
 
   // Optimistic Mutations with Background DB Sync + Rollback
   createPurchase: (data: {
@@ -243,6 +244,29 @@ export const useAppStore = create<AppStore>((set, get) => ({
       // ignore storage errors
     }
     set({ columnPrefs: next });
+  },
+
+  resetStore: () => {
+    activeBootstrapPromise = null;
+    set({
+      suppliers: [],
+      purchases: [],
+      batches: [],
+      movements: [],
+      sales: [],
+      shops: [],
+      dealerTransactions: [],
+      workers: [],
+      workerPayments: [],
+      expenses: [],
+      vehicles: [],
+      settings: DEFAULT_SETTINGS,
+      initialized: false,
+      loading: false,
+      syncingCount: 0,
+      lastSyncedAt: null,
+      globalError: null,
+    });
   },
 
   bootstrap: async (options) => {
