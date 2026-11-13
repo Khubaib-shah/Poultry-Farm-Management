@@ -9,6 +9,7 @@ import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
+import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 
 interface OwnShopSalesPageProps {
   onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
@@ -33,6 +34,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
   const [saleNotes, setSaleNotes] = useState('');
 
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const { isSubmitting: isSavingSale, run: runSaveSale } = useThrottledSubmit();
 
   const availableStock = useMemo(
     () =>
@@ -83,20 +85,22 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
     }
 
     const notesCopy = saleNotes;
-    setQuantityPieces('');
-    setTotalSaleAmount('');
-    setSaleNotes('');
 
-    try {
-      await createOwnShopSale({
-        saleDate,
-        quantityPieces: pieces,
-        totalSaleAmount: amount,
-        notes: notesCopy || undefined,
-      });
-    } catch {
-      // handled by store
-    }
+    await runSaveSale(async () => {
+      try {
+        await createOwnShopSale({
+          saleDate,
+          quantityPieces: pieces,
+          totalSaleAmount: amount,
+          notes: notesCopy || undefined,
+        });
+        setQuantityPieces('');
+        setTotalSaleAmount('');
+        setSaleNotes('');
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const livePieces = parseInt(quantityPieces || '0', 10);
@@ -304,11 +308,12 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
           <div className="flex justify-end pt-1">
             <button
               type="submit"
-              disabled={availableStock <= 0}
-              className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center px-6 py-2.5 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs disabled:opacity-50 gap-2 cursor-pointer"
+              disabled={isSavingSale || availableStock <= 0}
+              aria-busy={isSavingSale}
+              className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center px-6 py-2.5 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs disabled:opacity-50 disabled:cursor-not-allowed gap-2 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>Save Sale</span>
+              <span>{isSavingSale ? 'Saving...' : 'Save Sale'}</span>
             </button>
           </div>
         </form>

@@ -10,6 +10,7 @@ import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { formatPKR, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
+import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 
 interface ExpensesPageProps {
   onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
@@ -50,6 +51,8 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
   const [expenseDate, setExpenseDate] = useState(() => getLocalPakistanDate());
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [description, setDescription] = useState('');
+  const { isSubmitting: isSavingExpense, run: runSaveExpense } = useThrottledSubmit();
+  const { isSubmitting: isDeletingExpense, run: runDeleteExpense } = useThrottledSubmit();
 
   const handleCreateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,34 +63,39 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
     }
 
     const descVal = description.trim() || undefined;
-    setIsNewExpenseOpen(false);
-    setAmount('');
-    setDescription('');
 
-    try {
-      await createExpense({
-        category,
-        amount: expAmount,
-        expenseDate,
-        paymentMethod,
-        description: descVal,
-      });
-    } catch {
-      // handled by store
-    }
+    await runSaveExpense(async () => {
+      try {
+        await createExpense({
+          category,
+          amount: expAmount,
+          expenseDate,
+          paymentMethod,
+          description: descVal,
+        });
+        setIsNewExpenseOpen(false);
+        setAmount('');
+        setDescription('');
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const handleDeleteExpense = async (id: number) => {
+    if (isDeletingExpense) return;
     if (confirmDeleteId !== id) {
       setConfirmDeleteId(id);
       return;
     }
-    setConfirmDeleteId(null);
-    try {
-      await deleteExpense(id);
-    } catch {
-      // handled by store
-    }
+    await runDeleteExpense(async () => {
+      setConfirmDeleteId(null);
+      try {
+        await deleteExpense(id);
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const { categoryTotals, grandTotal } = useMemo(() => {
@@ -167,8 +175,9 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
       render: (e) => (
         <button
           type="button"
+          disabled={isDeletingExpense}
           onClick={() => handleDeleteExpense(e.id)}
-          className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition cursor-pointer ${
+          className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
             confirmDeleteId === e.id
               ? 'bg-rose-600 text-white'
               : 'text-[#636B76] hover:text-rose-600'
@@ -337,16 +346,19 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
           <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
+              disabled={isSavingExpense}
               onClick={() => setIsNewExpenseOpen(false)}
-              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
+              disabled={isSavingExpense}
+              aria-busy={isSavingExpense}
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              Save Expense
+              {isSavingExpense ? 'Saving...' : 'Save Expense'}
             </button>
           </div>
         </form>

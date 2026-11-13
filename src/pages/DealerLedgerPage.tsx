@@ -12,6 +12,7 @@ import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { formatPKR, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
+import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 
 interface DealerLedgerPageProps {
   onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
@@ -47,6 +48,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
   const [paymentDate, setPaymentDate] = useState(() => getLocalPakistanDate());
   const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const { isSubmitting: isSavingPayment, run: runSavePayment } = useThrottledSubmit();
 
   useEffect(() => {
     if (suppliers.length > 0 && !paymentSupplierId) {
@@ -99,21 +101,22 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
     const amt = parseFloat(paymentAmount);
     const notesVal = paymentNotes || 'Supplier payment';
 
-    setIsPaymentOpen(false);
-    setPaymentAmount('');
-    setPaymentNotes('');
-
-    try {
-      await recordSupplierPayment({
-        supplierId: supId,
-        amount: amt,
-        transactionDate: paymentDate,
-        paymentMethod,
-        notes: notesVal,
-      });
-    } catch {
-      // handled by store
-    }
+    await runSavePayment(async () => {
+      try {
+        await recordSupplierPayment({
+          supplierId: supId,
+          amount: amt,
+          transactionDate: paymentDate,
+          paymentMethod,
+          notes: notesVal,
+        });
+        setIsPaymentOpen(false);
+        setPaymentAmount('');
+        setPaymentNotes('');
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const columns: DataTableColumn<DealerTransaction>[] = [
@@ -395,16 +398,19 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
           <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
+              disabled={isSavingPayment}
               onClick={() => setIsPaymentOpen(false)}
-              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
+              disabled={isSavingPayment}
+              aria-busy={isSavingPayment}
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              Save Payment
+              {isSavingPayment ? 'Saving...' : 'Save Payment'}
             </button>
           </div>
         </form>

@@ -11,7 +11,6 @@ import {
   Receipt,
   BarChart3,
   Settings,
-  Feather,
 } from 'lucide-react';
 
 export type NavItemKey =
@@ -72,9 +71,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col fixed inset-y-0 left-0 z-30 border-r border-slate-800">
       {/* Brand Header */}
       <div className="h-16 flex items-center px-5 border-b border-slate-800 bg-slate-950/60">
-        <div className="w-8 h-8 rounded bg-emerald-600 flex items-center justify-center text-white mr-3 shadow-xs">
-          <Feather className="w-5 h-5" />
-        </div>
+        <img
+          src="/assets/aistudio/check-in_ceb7ef49.webp"
+          alt="Al-Madina Poultry Logo"
+          className="w-8 h-8 rounded-[8px] object-cover bg-[#F3F3F3] mr-3 shadow-xs"
+        />
         <div>
           <h1 className="text-sm font-bold text-white tracking-tight leading-tight">
             AL-MADINA POULTRY

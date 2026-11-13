@@ -10,6 +10,7 @@ import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { formatPKR, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
+import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 
 interface WorkersPageProps {
   onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
@@ -44,6 +45,9 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [workerFilter, setWorkerFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const { isSubmitting: isSavingWorker, run: runSaveWorker } = useThrottledSubmit();
+  const { isSubmitting: isSavingPayment, run: runSavePayment } = useThrottledSubmit();
 
   useEffect(() => {
     if (workers.length > 0 && !payWorkerId) {
@@ -95,16 +99,17 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
       isActive: true,
     };
 
-    setIsNewWorkerOpen(false);
-    setWorkerName('');
-    setWorkerPhone('');
-    setWorkerNotes('');
-
-    try {
-      await createWorker(payload);
-    } catch {
-      // handled by store
-    }
+    await runSaveWorker(async () => {
+      try {
+        await createWorker(payload);
+        setIsNewWorkerOpen(false);
+        setWorkerName('');
+        setWorkerPhone('');
+        setWorkerNotes('');
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
@@ -117,20 +122,22 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
 
     const wId = parseInt(payWorkerId, 10);
     const desc = payDesc || 'Daily wage / salary';
-    setIsPaymentOpen(false);
-    setPayAmount('');
-    setPayDesc('');
 
-    try {
-      await recordWorkerPayment(wId, {
-        amount,
-        paymentDate: payDate,
-        paymentMethod: payMethod,
-        description: desc,
-      });
-    } catch {
-      // handled by store
-    }
+    await runSavePayment(async () => {
+      try {
+        await recordWorkerPayment(wId, {
+          amount,
+          paymentDate: payDate,
+          paymentMethod: payMethod,
+          description: desc,
+        });
+        setIsPaymentOpen(false);
+        setPayAmount('');
+        setPayDesc('');
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const paymentColumns: DataTableColumn<WorkerPayment>[] = [
@@ -381,16 +388,19 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
           <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
+              disabled={isSavingWorker}
               onClick={() => setIsNewWorkerOpen(false)}
-              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
+              disabled={isSavingWorker}
+              aria-busy={isSavingWorker}
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              Add Staff
+              {isSavingWorker ? 'Saving...' : 'Add Staff'}
             </button>
           </div>
         </form>
@@ -462,16 +472,19 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
           <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
+              disabled={isSavingPayment}
               onClick={() => setIsPaymentOpen(false)}
-              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
+              disabled={isSavingPayment}
+              aria-busy={isSavingPayment}
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              Save Payment
+              {isSavingPayment ? 'Saving...' : 'Save Payment'}
             </button>
           </div>
         </form>

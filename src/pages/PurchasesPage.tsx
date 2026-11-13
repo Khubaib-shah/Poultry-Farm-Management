@@ -16,6 +16,7 @@ import {
 } from '../utils/poultryMath.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
+import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 
 interface PurchasesPageProps {
   onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
@@ -77,6 +78,11 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
   const [damagedPieces, setDamagedPieces] = useState('0');
   const [receivingNotes, setReceivingNotes] = useState('');
 
+  const { isSubmitting: isSavingLoad, run: runSaveLoad } = useThrottledSubmit();
+  const { isSubmitting: isAddingExpense, run: runAddExpense } = useThrottledSubmit();
+  const { isSubmitting: isDeletingExpense, run: runDeleteExpense } = useThrottledSubmit();
+  const { isSubmitting: isReceivingStock, run: runReceiveStock } = useThrottledSubmit();
+
   useEffect(() => {
     if (suppliersList.length > 0 && !supplierId) {
       setSupplierId(String(suppliersList[0].id));
@@ -100,26 +106,27 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
     const weight = parseFloat(totalWeightKg);
     const amt = parseFloat(purchaseAmount);
 
-    setIsNewLoadOpen(false);
-    setTotalWeightKg('');
-    setPurchaseAmount('');
-    setVehicleNumber('');
-    setDriverName('');
-    setNotes('');
-
-    try {
-      await createPurchase({
-        supplierId: supId,
-        purchaseDate,
-        totalWeightKg: weight,
-        purchaseAmount: amt,
-        vehicleNumber: vehicleNumber || undefined,
-        driverName: driverName || undefined,
-        notes: notes || undefined,
-      });
-    } catch {
-      // store rolls back & shows toast
-    }
+    await runSaveLoad(async () => {
+      try {
+        await createPurchase({
+          supplierId: supId,
+          purchaseDate,
+          totalWeightKg: weight,
+          purchaseAmount: amt,
+          vehicleNumber: vehicleNumber || undefined,
+          driverName: driverName || undefined,
+          notes: notes || undefined,
+        });
+        setIsNewLoadOpen(false);
+        setTotalWeightKg('');
+        setPurchaseAmount('');
+        setVehicleNumber('');
+        setDriverName('');
+        setNotes('');
+      } catch {
+        // store rolls back & shows toast
+      }
+    });
   };
 
   const handleAddLoadExpense = async (e: React.FormEvent) => {
@@ -129,35 +136,41 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
       return;
     }
 
+    const loadId = selectedLoadId;
     const amt = parseFloat(expenseAmount);
     const desc = expenseDesc;
-    setExpenseAmount('');
-    setExpenseDesc('');
 
-    try {
-      await addLoadExpense(selectedLoadId, {
-        category: expenseCategory,
-        amount: amt,
-        expenseDate,
-        description: desc || undefined,
-      });
-    } catch {
-      // handled by store
-    }
+    await runAddExpense(async () => {
+      try {
+        await addLoadExpense(loadId, {
+          category: expenseCategory,
+          amount: amt,
+          expenseDate,
+          description: desc || undefined,
+        });
+        setExpenseAmount('');
+        setExpenseDesc('');
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const handleDeleteExpense = async (expenseId: number) => {
-    if (!selectedLoadId) return;
+    if (!selectedLoadId || isDeletingExpense) return;
     if (confirmDeleteExpId !== expenseId) {
       setConfirmDeleteExpId(expenseId);
       return;
     }
-    setConfirmDeleteExpId(null);
-    try {
-      await deleteLoadExpense(selectedLoadId, expenseId);
-    } catch {
-      // handled by store
-    }
+    const loadId = selectedLoadId;
+    await runDeleteExpense(async () => {
+      setConfirmDeleteExpId(null);
+      try {
+        await deleteLoadExpense(loadId, expenseId);
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const openReceivingForm = (load: PurchaseLoad) => {
@@ -179,18 +192,20 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
     }
 
     const targetId = receivingLoad.id;
-    setIsReceivingOpen(false);
-    try {
-      await receiveStock(targetId, {
-        receivingDate: recvDate,
-        receivedPieces: pieces,
-        deadPieces: parseInt(deadPieces || '0', 10),
-        damagedPieces: parseInt(damagedPieces || '0', 10),
-        notes: receivingNotes || undefined,
-      });
-    } catch {
-      // handled by store
-    }
+    await runReceiveStock(async () => {
+      try {
+        await receiveStock(targetId, {
+          receivingDate: recvDate,
+          receivedPieces: pieces,
+          deadPieces: parseInt(deadPieces || '0', 10),
+          damagedPieces: parseInt(damagedPieces || '0', 10),
+          notes: receivingNotes || undefined,
+        });
+        setIsReceivingOpen(false);
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const filteredLoads = useMemo(() => {
@@ -569,16 +584,19 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
           <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
+              disabled={isSavingLoad}
               onClick={() => setIsNewLoadOpen(false)}
-              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] text-[#14161A] dark:text-[#F2F4F5] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] text-[#14161A] dark:text-[#F2F4F5] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
+              disabled={isSavingLoad}
+              aria-busy={isSavingLoad}
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              Save Truck Purchase
+              {isSavingLoad ? 'Saving...' : 'Save Truck Purchase'}
             </button>
           </div>
         </form>
@@ -688,17 +706,19 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
           <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
+              disabled={isReceivingStock}
               onClick={() => setIsReceivingOpen(false)}
-              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={liveSaleable <= 0}
-              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 cursor-pointer"
+              disabled={isReceivingStock || liveSaleable <= 0}
+              aria-busy={isReceivingStock}
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              Add Birds to Stock
+              {isReceivingStock ? 'Saving...' : 'Add Birds to Stock'}
             </button>
           </div>
         </form>
@@ -873,8 +893,9 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                         <span className="font-mono font-bold">{formatPKR(exp.amount)}</span>
                         <button
                           type="button"
+                          disabled={isDeletingExpense}
                           onClick={() => handleDeleteExpense(exp.id)}
-                          className={`px-2 py-1 rounded-full text-[10px] font-bold transition cursor-pointer ${
+                          className={`px-2 py-1 rounded-full text-[10px] font-bold transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
                             confirmDeleteExpId === exp.id
                               ? 'bg-rose-600 text-white'
                               : 'text-[#636B76] hover:text-rose-600'
@@ -936,9 +957,11 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
                 <div className="sm:col-span-3">
                   <button
                     type="submit"
-                    className="w-full min-h-[38px] px-3 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer whitespace-nowrap"
+                    disabled={isAddingExpense}
+                    aria-busy={isAddingExpense}
+                    className="w-full min-h-[38px] px-3 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
                   >
-                    + Add Cost
+                    {isAddingExpense ? 'Adding...' : '+ Add Cost'}
                   </button>
                 </div>
               </form>

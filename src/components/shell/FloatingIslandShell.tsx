@@ -11,7 +11,6 @@ import {
   Receipt,
   BarChart3,
   Settings,
-  Feather,
   Sun,
   Moon,
   HelpCircle,
@@ -26,6 +25,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { useTheme } from '../../context/ThemeContext.tsx';
 import { getLocalPakistanDate } from '../../utils/syncCalculations.ts';
+import { PWAInstallButton } from '../common/PWAInstallButton.tsx';
 
 export type NavItemKey =
   | 'dashboard'
@@ -144,11 +144,13 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
         type="button"
         onClick={() => onSelectTab('dashboard')}
         aria-label="Go to Overview"
-        className="hidden xl:flex fixed top-5 left-5 z-40 w-[52px] h-[52px] rounded-[18px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] items-center justify-center transition-transform hover:scale-105 cursor-pointer"
+        className="hidden xl:flex fixed top-5 left-5 z-40 w-[52px] h-[52px] rounded-[18px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] items-center justify-center p-1 transition-transform hover:scale-105 cursor-pointer"
       >
-        <div className="w-[34px] h-[34px] rounded-[12px] bg-[#D4F56B] flex items-center justify-center text-[#14161A] font-bold shadow-xs">
-          <Feather className="w-5 h-5" />
-        </div>
+        <img
+          src="/assets/aistudio/check-in_ceb7ef49.webp"
+          alt="Al-Madina Poultry Logo"
+          className="w-full h-full rounded-[13px] object-cover bg-[#F3F3F3]"
+        />
       </button>
 
       {/* 2. DESKTOP FLOATING NAV PILL */}
@@ -200,10 +202,12 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
       </nav>
 
       {/* 3. DESKTOP TOP-RIGHT UTILITY CLUSTER */}
-      <div className="hidden xl:flex fixed top-5 right-6 z-40 items-center gap-3">
+      <div className="hidden xl:flex fixed top-5 right-6 z-40 items-center gap-2.5">
         <div className="h-10 px-3.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center gap-2 text-[11px] font-bold tracking-[0.08em] uppercase text-[#4A515B] dark:text-[#A3AAB3]">
           <span>Khubaib Shah</span>
         </div>
+
+        <PWAInstallButton variant="pill" />
 
         <button
           type="button"
@@ -267,6 +271,10 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                   >
                     Dealer Accounts
                   </button>
+                  <PWAInstallButton
+                    variant="menu-item"
+                    onActionComplete={() => setProfileDropdownOpen(false)}
+                  />
                 </div>
               </motion.div>
             )}
@@ -344,12 +352,17 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
             type="button"
             onClick={() => onSelectTab('dashboard')}
             aria-label="Al-Madina Poultry Home"
-            className="w-11 h-11 rounded-[16px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.06)] flex items-center justify-center text-[#14161A] dark:text-[#D4F56B] active:scale-95 transition cursor-pointer"
+            className="w-11 h-11 rounded-[16px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.06)] flex items-center justify-center p-1 active:scale-95 transition cursor-pointer"
           >
-            <Feather className="w-5 h-5" />
+            <img
+              src="/assets/aistudio/check-in_ceb7ef49.webp"
+              alt="Al-Madina Poultry Logo"
+              className="w-full h-full rounded-[11px] object-cover bg-[#F3F3F3]"
+            />
           </button>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            <PWAInstallButton variant="mobile-icon" />
             <button
               type="button"
               onClick={() => onQuickAction('new-sale')}
@@ -538,9 +551,11 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
             >
               <div className="flex items-center justify-between pb-4 border-b border-[#E3E6E8] dark:border-[#2A2F35]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-[12px] bg-[#D4F56B] flex items-center justify-center text-[#14161A]">
-                    <Feather className="w-4 h-4" />
-                  </div>
+                  <img
+                    src="/assets/aistudio/check-in_ceb7ef49.webp"
+                    alt="Al-Madina Poultry Logo"
+                    className="w-9 h-9 rounded-[12px] object-cover border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F3F3F3]"
+                  />
                   <div>
                     <div className="font-bold text-sm tracking-tight text-[#14161A] dark:text-[#F2F4F5]">
                       {businessName}
@@ -595,7 +610,14 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                 })}
               </div>
 
-              <div className="pt-3 border-t border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-between">
+              <div className="pt-2 pb-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
+                <PWAInstallButton
+                  variant="menu-item"
+                  onActionComplete={() => setMobileDrawerOpen(false)}
+                />
+              </div>
+
+              <div className="pt-2 border-t border-[#E3E6E8] dark:border-[#2A2F35] flex items-center justify-between">
                 <button
                   type="button"
                   onClick={toggleTheme}

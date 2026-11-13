@@ -12,6 +12,7 @@ import { Select } from '../components/common/Select.tsx';
 import { formatPKR, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
+import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 
 interface SuppliersPageProps {
   onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
@@ -53,6 +54,9 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
   const [paymentDate, setPaymentDate] = useState(() => getLocalPakistanDate());
   const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');
   const [paymentNotes, setPaymentNotes] = useState('');
+
+  const { isSubmitting: isSavingSupplier, run: runSaveSupplier } = useThrottledSubmit();
+  const { isSubmitting: isSavingPayment, run: runSavePayment } = useThrottledSubmit();
 
   const accountSupplier = useMemo(
     () =>
@@ -102,18 +106,19 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
       notes: notes.trim() || undefined,
     };
 
-    setIsNewSupplierOpen(false);
-    setName('');
-    setPhone('');
-    setAddress('');
-    setOpeningBalance('0');
-    setNotes('');
-
-    try {
-      await createSupplier(payload);
-    } catch {
-      // handled by store
-    }
+    await runSaveSupplier(async () => {
+      try {
+        await createSupplier(payload);
+        setIsNewSupplierOpen(false);
+        setName('');
+        setPhone('');
+        setAddress('');
+        setOpeningBalance('0');
+        setNotes('');
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
@@ -126,19 +131,21 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
     const targetSupplierId = payModalSupplierId;
     const amt = parseFloat(paymentAmount);
     const notesVal = paymentNotes || 'Supplier payment';
-    closePayModal();
 
-    try {
-      await recordSupplierPayment({
-        supplierId: targetSupplierId,
-        amount: amt,
-        transactionDate: paymentDate,
-        paymentMethod,
-        notes: notesVal,
-      });
-    } catch {
-      // handled by store
-    }
+    await runSavePayment(async () => {
+      try {
+        await recordSupplierPayment({
+          supplierId: targetSupplierId,
+          amount: amt,
+          transactionDate: paymentDate,
+          paymentMethod,
+          notes: notesVal,
+        });
+        closePayModal();
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const filtered = useMemo(() => {
@@ -455,16 +462,19 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
           <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
+              disabled={isSavingSupplier}
               onClick={() => setIsNewSupplierOpen(false)}
-              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
+              disabled={isSavingSupplier}
+              aria-busy={isSavingSupplier}
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              Save Supplier
+              {isSavingSupplier ? 'Saving...' : 'Save Supplier'}
             </button>
           </div>
         </form>
@@ -625,16 +635,19 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
           <div className="pt-3 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
             <button
               type="button"
+              disabled={isSavingPayment}
               onClick={closePayModal}
-              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] cursor-pointer"
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] cursor-pointer"
+              disabled={isSavingPayment}
+              aria-busy={isSavingPayment}
+              className="min-h-[42px] px-5 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              Save Payment
+              {isSavingPayment ? 'Saving...' : 'Save Payment'}
             </button>
           </div>
         </form>

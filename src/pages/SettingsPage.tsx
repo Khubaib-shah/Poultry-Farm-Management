@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { AppSettings } from '../types/index.ts';
 import { useAppStore } from '../store/useAppStore.ts';
+import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
+import { PWAInstallButton } from '../components/common/PWAInstallButton.tsx';
 
 interface SettingsPageProps {
   onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
@@ -17,8 +19,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
   const seedDemoData = useAppStore((s) => s.seedDemoData);
 
   const [formState, setFormState] = useState<AppSettings>(storeSettings);
-  const [seeding, setSeeding] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+
+  const { isSubmitting: isSavingSettings, run: runSaveSettings } = useThrottledSubmit();
+  const { isSubmitting: seeding, run: runSeed } = useThrottledSubmit();
 
   useEffect(() => {
     setFormState(storeSettings);
@@ -26,11 +30,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      await updateSettings(formState);
-    } catch {
-      // handled by store
-    }
+    await runSaveSettings(async () => {
+      try {
+        await updateSettings(formState);
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const handleSeed = async (force: boolean) => {
@@ -39,12 +45,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
       return;
     }
     setConfirmReset(false);
-    try {
-      setSeeding(true);
-      await seedDemoData(force);
-    } finally {
-      setSeeding(false);
-    }
+    await runSeed(async () => {
+      try {
+        await seedDemoData(force);
+      } catch {
+        // handled by store
+      }
+    });
   };
 
   const inputCls =
@@ -157,13 +164,18 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
         <div className="flex justify-end">
           <button
             type="submit"
-            className="min-h-[44px] px-6 py-2.5 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] flex items-center gap-2 shadow-xs transition cursor-pointer"
+            disabled={isSavingSettings}
+            aria-busy={isSavingSettings}
+            className="min-h-[44px] px-6 py-2.5 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-xs transition cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            <span>Save Settings</span>
+            <span>{isSavingSettings ? 'Saving...' : 'Save Settings'}</span>
           </button>
         </div>
       </form>
+
+      {/* Install App / Add to Home Screen */}
+      <PWAInstallButton variant="card" />
 
       {/* Sample Data Controls */}
       <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-5 sm:p-6 space-y-4 shadow-xs">

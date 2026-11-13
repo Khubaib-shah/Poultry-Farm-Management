@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ThemeProvider } from './context/ThemeContext.tsx';
 import { FloatingIslandShell, NavItemKey } from './components/shell/FloatingIslandShell.tsx';
 import { ToastContainer } from './components/common/Toast.tsx';
+import { OfflineIndicator } from './components/common/OfflineIndicator.tsx';
 import { ErrorBoundary } from './components/common/ErrorBoundary.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { PurchasesPage } from './pages/PurchasesPage.tsx';
@@ -123,6 +124,7 @@ function AppShellContent() {
       {currentTab === 'settings' && <SettingsPage onShowToast={addToast} />}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <OfflineIndicator />
     </FloatingIslandShell>
   );
 }
