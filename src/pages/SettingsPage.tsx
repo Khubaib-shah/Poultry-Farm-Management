@@ -9,11 +9,7 @@ import { useAppStore } from '../store/useAppStore.ts';
 import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 import { PWAInstallButton } from '../components/common/PWAInstallButton.tsx';
 
-interface SettingsPageProps {
-  onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
-}
-
-export const SettingsPage: React.FC<SettingsPageProps> = () => {
+export const SettingsPage: React.FC = () => {
   const storeSettings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const seedDemoData = useAppStore((s) => s.seedDemoData);

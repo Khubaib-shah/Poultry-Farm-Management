@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ThemeProvider } from './context/ThemeContext.tsx';
 import { FloatingIslandShell, NavItemKey } from './components/shell/FloatingIslandShell.tsx';
 import { ToastContainer } from './components/common/Toast.tsx';
@@ -121,7 +121,7 @@ function AppShellContent() {
 
       {currentTab === 'reports' && <ReportsPage onShowToast={addToast} />}
 
-      {currentTab === 'settings' && <SettingsPage onShowToast={addToast} />}
+      {currentTab === 'settings' && <SettingsPage />}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <OfflineIndicator />

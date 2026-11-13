@@ -13,7 +13,6 @@ import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 
 interface OwnShopSalesPageProps {
   onShowToast: (text: string, type: 'success' | 'error' | 'info') => void;
-  initialOpenSaleModal?: boolean;
 }
 
 export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
