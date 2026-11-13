@@ -33,7 +33,7 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
   const [saleNotes, setSaleNotes] = useState('');
 
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
-  const { isSubmitting: isSavingSale, run: runSaveSale } = useThrottledSubmit();
+  const { isSubmitting: isSavingSale, runOptimistic: runSaveSale } = useThrottledSubmit();
 
   const availableStock = useMemo(
     () =>
@@ -85,21 +85,24 @@ export const OwnShopSalesPage: React.FC<OwnShopSalesPageProps> = ({
 
     const notesCopy = saleNotes;
 
-    await runSaveSale(async () => {
-      try {
-        await createOwnShopSale({
+    await runSaveSale((onOptimistic) =>
+      createOwnShopSale(
+        {
           saleDate,
           quantityPieces: pieces,
           totalSaleAmount: amount,
           notes: notesCopy || undefined,
-        });
-        setQuantityPieces('');
-        setTotalSaleAmount('');
-        setSaleNotes('');
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            setQuantityPieces('');
+            setTotalSaleAmount('');
+            setSaleNotes('');
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const livePieces = parseInt(quantityPieces || '0', 10);

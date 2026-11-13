@@ -164,3 +164,32 @@ test('createStoreMutationGuard allows retry immediately when a mutation fails', 
   assert.deepEqual(ok, { id: 77 });
   assert.equal(calls, 2);
 });
+
+test('createStoreMutationGuard allows distinct payloads concurrently while blocking identical ones', async () => {
+  let clock = 30000;
+  const guard = createStoreMutationGuard({ duplicateCooldownMs: 1500, now: () => clock });
+  let apiCalls = 0;
+
+  let resolveFirst!: (val: { id: number }) => void;
+  const p1 = guard.run('createExpense', { category: 'Electricity', amount: 1500 }, () => {
+    apiCalls += 1;
+    return new Promise<{ id: number }>((resolve) => {
+      resolveFirst = resolve;
+    });
+  });
+
+  // Distinct payload submitted while first is still syncing must NOT be dropped
+  const p2 = guard.run('createExpense', { category: 'Tea', amount: 200 }, async () => {
+    apiCalls += 1;
+    return { id: 202 };
+  });
+
+  assert.equal(guard.isInFlight('createExpense'), true);
+  assert.equal(apiCalls, 2);
+
+  resolveFirst({ id: 201 });
+  const [r1, r2] = await Promise.all([p1, p2]);
+  assert.deepEqual(r1, { id: 201 });
+  assert.deepEqual(r2, { id: 202 });
+  assert.equal(guard.isInFlight('createExpense'), false);
+});

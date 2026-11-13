@@ -17,7 +17,7 @@ export const SettingsPage: React.FC = () => {
   const [formState, setFormState] = useState<AppSettings>(storeSettings);
   const [confirmReset, setConfirmReset] = useState(false);
 
-  const { isSubmitting: isSavingSettings, run: runSaveSettings } = useThrottledSubmit();
+  const { isSubmitting: isSavingSettings, runOptimistic: runSaveSettings } = useThrottledSubmit();
   const { isSubmitting: seeding, run: runSeed } = useThrottledSubmit();
 
   useEffect(() => {
@@ -26,13 +26,11 @@ export const SettingsPage: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    await runSaveSettings(async () => {
-      try {
-        await updateSettings(formState);
-      } catch {
-        // handled by store
-      }
-    });
+    await runSaveSettings((onOptimistic) =>
+      updateSettings(formState, {
+        onOptimistic,
+      })
+    );
   };
 
   const handleSeed = async (force: boolean) => {

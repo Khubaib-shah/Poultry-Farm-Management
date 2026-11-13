@@ -32,6 +32,7 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
 }) => {
   const suppliers = useAppStore((s) => s.suppliers);
   const dealerTransactions = useAppStore((s) => s.dealerTransactions);
+  const resolvedIdMap = useAppStore((s) => s.resolvedIdMap);
   const loading = useAppStore((s) => s.loading);
   const initialized = useAppStore((s) => s.initialized);
   const isInitialLoading = loading && !initialized;
@@ -55,32 +56,40 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
   const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');
   const [paymentNotes, setPaymentNotes] = useState('');
 
-  const { isSubmitting: isSavingSupplier, run: runSaveSupplier } = useThrottledSubmit();
-  const { isSubmitting: isSavingPayment, run: runSavePayment } = useThrottledSubmit();
+  const { isSubmitting: isSavingSupplier, runOptimistic: runSaveSupplier } = useThrottledSubmit();
+  const { isSubmitting: isSavingPayment, runOptimistic: runSavePayment } = useThrottledSubmit();
 
   const accountSupplier = useMemo(
     () =>
       accountModalSupplierId
-        ? suppliers.find((s) => s.id === accountModalSupplierId) || null
+        ? suppliers.find(
+            (s) => s.id === accountModalSupplierId || s.id === resolvedIdMap[accountModalSupplierId]
+          ) || null
         : null,
-    [suppliers, accountModalSupplierId]
+    [suppliers, accountModalSupplierId, resolvedIdMap]
   );
 
   const paySupplier = useMemo(
     () =>
       payModalSupplierId
-        ? suppliers.find((s) => s.id === payModalSupplierId) || null
+        ? suppliers.find(
+            (s) => s.id === payModalSupplierId || s.id === resolvedIdMap[payModalSupplierId]
+          ) || null
         : null,
-    [suppliers, payModalSupplierId]
+    [suppliers, payModalSupplierId, resolvedIdMap]
   );
 
   const supplierLedger = useMemo(() => {
-    if (!accountModalSupplierId) return { ledger: [], totalDebit: 0, totalCredit: 0 };
-    const txs = dealerTransactions.filter((t) => t.supplierId === accountModalSupplierId);
+    if (!accountSupplier) return { ledger: [], totalDebit: 0, totalCredit: 0 };
+    const txs = dealerTransactions.filter(
+      (t) =>
+        t.supplierId === accountSupplier.id ||
+        t.supplierId === accountModalSupplierId
+    );
     const totalDebit = txs.reduce((s, t) => s + Number(t.debitAmount || 0), 0);
     const totalCredit = txs.reduce((s, t) => s + Number(t.creditAmount || 0), 0);
     return { ledger: txs, totalDebit, totalCredit };
-  }, [dealerTransactions, accountModalSupplierId]);
+  }, [dealerTransactions, accountSupplier, accountModalSupplierId]);
 
   const closePayModal = () => {
     setPayModalSupplierId(null);
@@ -106,46 +115,49 @@ export const SuppliersPage: React.FC<SuppliersPageProps> = ({
       notes: notes.trim() || undefined,
     };
 
-    await runSaveSupplier(async () => {
-      try {
-        await createSupplier(payload);
-        setIsNewSupplierOpen(false);
-        setName('');
-        setPhone('');
-        setAddress('');
-        setOpeningBalance('0');
-        setNotes('');
-      } catch {
-        // handled by store
-      }
-    });
+    await runSaveSupplier((onOptimistic) =>
+      createSupplier(payload, {
+        onOptimistic: () => {
+          setIsNewSupplierOpen(false);
+          setName('');
+          setPhone('');
+          setAddress('');
+          setOpeningBalance('0');
+          setNotes('');
+          onOptimistic();
+        },
+      })
+    );
   };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!payModalSupplierId || !paymentAmount || parseFloat(paymentAmount) <= 0) {
+    const targetSupplierId = paySupplier?.id ?? payModalSupplierId;
+    const amt = parseFloat(paymentAmount);
+    if (!targetSupplierId || !Number.isFinite(amt) || amt <= 0) {
       onShowToast('Please enter a valid payment amount', 'error');
       return;
     }
 
-    const targetSupplierId = payModalSupplierId;
-    const amt = parseFloat(paymentAmount);
     const notesVal = paymentNotes || 'Supplier payment';
 
-    await runSavePayment(async () => {
-      try {
-        await recordSupplierPayment({
+    await runSavePayment((onOptimistic) =>
+      recordSupplierPayment(
+        {
           supplierId: targetSupplierId,
           amount: amt,
           transactionDate: paymentDate,
           paymentMethod,
           notes: notesVal,
-        });
-        closePayModal();
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            closePayModal();
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const filtered = useMemo(() => {

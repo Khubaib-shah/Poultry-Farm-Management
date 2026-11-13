@@ -42,7 +42,7 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
   const [adjustBatchId, setAdjustBatchId] = useState<string>('');
   const [quantityChange, setQuantityChange] = useState<string>('-5');
   const [adjustReason, setAdjustReason] = useState<string>('');
-  const { isSubmitting: isAdjusting, run: runAdjust } = useThrottledSubmit();
+  const { isSubmitting: isAdjusting, runOptimistic: runAdjust } = useThrottledSubmit();
 
   useEffect(() => {
     if (batches.length > 0 && !selectedBatchId) {
@@ -66,21 +66,24 @@ export const InventoryPage: React.FC<InventoryPageProps> = ({ onShowToast }) => 
 
     const reason = adjustReason || 'Manual stock count update';
 
-    await runAdjust(async () => {
-      try {
-        await adjustStock({
+    await runAdjust((onOptimistic) =>
+      adjustStock(
+        {
           stockBatchId: parseInt(adjustBatchId, 10),
           quantityChange: qty,
           reason,
           adjustmentType: qty < 0 ? 'DAMAGE' : 'ADJUSTMENT',
-        });
-        setIsAdjustOpen(false);
-        setQuantityChange('-5');
-        setAdjustReason('');
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            setIsAdjustOpen(false);
+            setQuantityChange('-5');
+            setAdjustReason('');
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const filteredBatches = useMemo(() => {

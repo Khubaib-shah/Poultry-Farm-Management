@@ -51,35 +51,38 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
   const [expenseDate, setExpenseDate] = useState(() => getLocalPakistanDate());
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [description, setDescription] = useState('');
-  const { isSubmitting: isSavingExpense, run: runSaveExpense } = useThrottledSubmit();
-  const { isSubmitting: isDeletingExpense, run: runDeleteExpense } = useThrottledSubmit();
+  const { isSubmitting: isSavingExpense, runOptimistic: runSaveExpense } = useThrottledSubmit();
+  const { isSubmitting: isDeletingExpense, runOptimistic: runDeleteExpense } = useThrottledSubmit();
 
   const handleCreateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     const expAmount = parseFloat(amount);
-    if (!category || isNaN(expAmount) || expAmount <= 0) {
+    if (!category || !Number.isFinite(expAmount) || expAmount <= 0) {
       onShowToast('Please choose a category and enter amount', 'error');
       return;
     }
 
     const descVal = description.trim() || undefined;
 
-    await runSaveExpense(async () => {
-      try {
-        await createExpense({
+    await runSaveExpense((onOptimistic) =>
+      createExpense(
+        {
           category,
           amount: expAmount,
           expenseDate,
           paymentMethod,
           description: descVal,
-        });
-        setIsNewExpenseOpen(false);
-        setAmount('');
-        setDescription('');
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            setIsNewExpenseOpen(false);
+            setAmount('');
+            setDescription('');
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const handleDeleteExpense = async (id: number) => {
@@ -88,14 +91,14 @@ export const ExpensesPage: React.FC<ExpensesPageProps> = ({ onShowToast }) => {
       setConfirmDeleteId(id);
       return;
     }
-    await runDeleteExpense(async () => {
-      setConfirmDeleteId(null);
-      try {
-        await deleteExpense(id);
-      } catch {
-        // handled by store
-      }
-    });
+    await runDeleteExpense((onOptimistic) =>
+      deleteExpense(id, {
+        onOptimistic: () => {
+          setConfirmDeleteId(null);
+          onOptimistic();
+        },
+      })
+    );
   };
 
   const { categoryTotals, grandTotal } = useMemo(() => {

@@ -77,6 +77,31 @@ export function useThrottledSubmit(options: UseThrottledSubmitOptions = {}) {
     [minDisabledMs]
   );
 
+  const runOptimistic = useCallback(
+    async <T>(execute: (commitOptimistic: () => void) => Promise<T>): Promise<boolean> => {
+      try {
+        await run(
+          () =>
+            new Promise<void>((resolve, reject) => {
+              let committed = false;
+              execute(() => {
+                committed = true;
+                resolve();
+              }).catch((err) => {
+                if (!committed) {
+                  reject(err);
+                }
+              });
+            })
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [run]
+  );
+
   const reset = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -91,6 +116,7 @@ export function useThrottledSubmit(options: UseThrottledSubmitOptions = {}) {
   return {
     isSubmitting,
     run,
+    runOptimistic,
     reset,
   };
 }

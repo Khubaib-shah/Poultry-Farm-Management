@@ -65,7 +65,8 @@ export function createStoreMutationGuard(options: StoreMutationGuardOptions = {}
   const duplicateCooldownMs = options.duplicateCooldownMs ?? 1500;
   const now = options.now ?? (() => Date.now());
 
-  const inFlightByAction = new Map<string, Promise<unknown>>();
+  const inFlightByFingerprint = new Map<string, Promise<unknown>>();
+  const activeCountByAction = new Map<string, number>();
   const recentByFingerprint = new Map<string, { at: number; value: unknown }>();
 
   const makeFingerprint = (action: string, payload: unknown): string => {
@@ -89,7 +90,8 @@ export function createStoreMutationGuard(options: StoreMutationGuardOptions = {}
     payload: unknown,
     task: () => Promise<T>
   ): Promise<T> => {
-    const existingInFlight = inFlightByAction.get(action);
+    const fingerprint = makeFingerprint(action, payload);
+    const existingInFlight = inFlightByFingerprint.get(fingerprint);
     if (existingInFlight) {
       return existingInFlight as Promise<T>;
     }
@@ -97,11 +99,12 @@ export function createStoreMutationGuard(options: StoreMutationGuardOptions = {}
     const currentTime = now();
     pruneExpired(currentTime);
 
-    const fingerprint = makeFingerprint(action, payload);
     const recent = recentByFingerprint.get(fingerprint);
     if (recent && currentTime - recent.at < duplicateCooldownMs) {
       return Promise.resolve(recent.value as T);
     }
+
+    activeCountByAction.set(action, (activeCountByAction.get(action) ?? 0) + 1);
 
     const promise = (async () => {
       try {
@@ -109,15 +112,21 @@ export function createStoreMutationGuard(options: StoreMutationGuardOptions = {}
         recentByFingerprint.set(fingerprint, { at: now(), value: result });
         return result;
       } finally {
-        inFlightByAction.delete(action);
+        inFlightByFingerprint.delete(fingerprint);
+        const nextCount = (activeCountByAction.get(action) ?? 1) - 1;
+        if (nextCount <= 0) {
+          activeCountByAction.delete(action);
+        } else {
+          activeCountByAction.set(action, nextCount);
+        }
       }
     })();
 
-    inFlightByAction.set(action, promise);
+    inFlightByFingerprint.set(fingerprint, promise);
     return promise;
   };
 
-  const isInFlight = (action: string): boolean => inFlightByAction.has(action);
+  const isInFlight = (action: string): boolean => (activeCountByAction.get(action) ?? 0) > 0;
 
   return {
     run,

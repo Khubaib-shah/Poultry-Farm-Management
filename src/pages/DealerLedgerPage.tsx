@@ -48,7 +48,7 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
   const [paymentDate, setPaymentDate] = useState(() => getLocalPakistanDate());
   const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');
   const [paymentNotes, setPaymentNotes] = useState('');
-  const { isSubmitting: isSavingPayment, run: runSavePayment } = useThrottledSubmit();
+  const { isSubmitting: isSavingPayment, runOptimistic: runSavePayment } = useThrottledSubmit();
 
   useEffect(() => {
     if (suppliers.length > 0 && !paymentSupplierId) {
@@ -92,31 +92,34 @@ export const DealerLedgerPage: React.FC<DealerLedgerPageProps> = ({
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!paymentSupplierId || !paymentAmount || parseFloat(paymentAmount) <= 0) {
+    const supId = parseInt(paymentSupplierId, 10);
+    const amt = parseFloat(paymentAmount);
+    if (!paymentSupplierId || !Number.isFinite(supId) || !Number.isFinite(amt) || amt <= 0) {
       onShowToast('Please choose a supplier and enter amount', 'error');
       return;
     }
 
-    const supId = parseInt(paymentSupplierId, 10);
-    const amt = parseFloat(paymentAmount);
     const notesVal = paymentNotes || 'Supplier payment';
 
-    await runSavePayment(async () => {
-      try {
-        await recordSupplierPayment({
+    await runSavePayment((onOptimistic) =>
+      recordSupplierPayment(
+        {
           supplierId: supId,
           amount: amt,
           transactionDate: paymentDate,
           paymentMethod,
           notes: notesVal,
-        });
-        setIsPaymentOpen(false);
-        setPaymentAmount('');
-        setPaymentNotes('');
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            setIsPaymentOpen(false);
+            setPaymentAmount('');
+            setPaymentNotes('');
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const columns: DataTableColumn<DealerTransaction>[] = [

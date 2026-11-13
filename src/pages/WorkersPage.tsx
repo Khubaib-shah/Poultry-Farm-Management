@@ -24,6 +24,7 @@ const WAGE_METHOD_OPTIONS = [
 export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
   const workers = useAppStore((s) => s.workers);
   const workerPayments = useAppStore((s) => s.workerPayments);
+  const resolvedIdMap = useAppStore((s) => s.resolvedIdMap);
   const loading = useAppStore((s) => s.loading);
   const initialized = useAppStore((s) => s.initialized);
   const isInitialLoading = loading && !initialized;
@@ -46,8 +47,8 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
   const [workerFilter, setWorkerFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { isSubmitting: isSavingWorker, run: runSaveWorker } = useThrottledSubmit();
-  const { isSubmitting: isSavingPayment, run: runSavePayment } = useThrottledSubmit();
+  const { isSubmitting: isSavingWorker, runOptimistic: runSaveWorker } = useThrottledSubmit();
+  const { isSubmitting: isSavingPayment, runOptimistic: runSavePayment } = useThrottledSubmit();
 
   useEffect(() => {
     if (workers.length > 0 && !payWorkerId) {
@@ -68,9 +69,13 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
   const selectedWorkerHistory = useMemo(
     () =>
       selectedWorker
-        ? workerPayments.filter((p) => p.workerId === selectedWorker.id)
+        ? workerPayments.filter(
+            (p) =>
+              p.workerId === selectedWorker.id ||
+              p.workerId === resolvedIdMap[selectedWorker.id]
+          )
         : [],
-    [workerPayments, selectedWorker]
+    [workerPayments, selectedWorker, resolvedIdMap]
   );
 
   const filteredPayments = useMemo(() => {
@@ -98,46 +103,60 @@ export const WorkersPage: React.FC<WorkersPageProps> = ({ onShowToast }) => {
       notes: workerNotes.trim() || undefined,
       isActive: true,
     };
+    let optWorkerId: number | null = null;
 
-    await runSaveWorker(async () => {
-      try {
-        await createWorker(payload);
-        setIsNewWorkerOpen(false);
-        setWorkerName('');
-        setWorkerPhone('');
-        setWorkerNotes('');
-      } catch {
-        // handled by store
-      }
-    });
+    await runSaveWorker((onOptimistic) =>
+      createWorker(payload, {
+        onOptimistic: (optWorker) => {
+          optWorkerId = optWorker.id;
+          setIsNewWorkerOpen(false);
+          setWorkerName('');
+          setWorkerPhone('');
+          setWorkerNotes('');
+          if (!payWorkerId) {
+            setPayWorkerId(String(optWorker.id));
+          }
+          onOptimistic();
+        },
+        onSynced: (created) => {
+          setPayWorkerId((prev) =>
+            prev === String(optWorkerId) ? String(created.id) : prev
+          );
+        },
+      })
+    );
   };
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(payAmount);
-    if (!payWorkerId || isNaN(amount) || amount <= 0) {
+    const wId = parseInt(payWorkerId, 10);
+    if (!payWorkerId || !Number.isFinite(wId) || !Number.isFinite(amount) || amount <= 0) {
       onShowToast('Please pick a worker and enter amount', 'error');
       return;
     }
 
-    const wId = parseInt(payWorkerId, 10);
     const desc = payDesc || 'Daily wage / salary';
 
-    await runSavePayment(async () => {
-      try {
-        await recordWorkerPayment(wId, {
+    await runSavePayment((onOptimistic) =>
+      recordWorkerPayment(
+        wId,
+        {
           amount,
           paymentDate: payDate,
           paymentMethod: payMethod,
           description: desc,
-        });
-        setIsPaymentOpen(false);
-        setPayAmount('');
-        setPayDesc('');
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            setIsPaymentOpen(false);
+            setPayAmount('');
+            setPayDesc('');
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const paymentColumns: DataTableColumn<WorkerPayment>[] = [

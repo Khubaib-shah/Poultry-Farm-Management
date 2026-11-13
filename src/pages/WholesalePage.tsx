@@ -43,8 +43,8 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
 
-  const { isSubmitting: isSavingShop, run: runSaveShop } = useThrottledSubmit();
-  const { isSubmitting: isSavingDelivery, run: runSaveDelivery } = useThrottledSubmit();
+  const { isSubmitting: isSavingShop, runOptimistic: runSaveShop } = useThrottledSubmit();
+  const { isSubmitting: isSavingDelivery, runOptimistic: runSaveDelivery } = useThrottledSubmit();
 
   useEffect(() => {
     if (shops.length > 0 && !selectedShopId) {
@@ -98,25 +98,42 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
     const ownerVal = ownerName.trim() || undefined;
     const phoneVal = phone.trim() || undefined;
     const addrVal = address.trim() || undefined;
+    let optimisticId: number | null = null;
 
-    await runSaveShop(async () => {
-      try {
-        const created = await createShop({
+    await runSaveShop((onOptimistic) =>
+      createShop(
+        {
           shopName: nameVal,
           ownerName: ownerVal,
           phone: phoneVal,
           address: addrVal,
-        });
-        setSelectedShopId(String(created.id));
-        setIsNewShopOpen(false);
-        setShopName('');
-        setOwnerName('');
-        setPhone('');
-        setAddress('');
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: (optShop) => {
+            optimisticId = optShop.id;
+            setSelectedShopId(String(optShop.id));
+            setIsNewShopOpen(false);
+            setShopName('');
+            setOwnerName('');
+            setPhone('');
+            setAddress('');
+            onOptimistic();
+          },
+          onSynced: (createdShop) => {
+            setSelectedShopId((prev) =>
+              prev === String(optimisticId) ? String(createdShop.id) : prev
+            );
+          },
+          onRollback: () => {
+            setSelectedShopId((prev) => {
+              if (prev !== String(optimisticId)) return prev;
+              const fallback = useAppStore.getState().shops[0];
+              return fallback ? String(fallback.id) : '';
+            });
+          },
+        }
+      )
+    );
   };
 
   const handleCreateWholesaleSale = async (e: React.FormEvent) => {
@@ -137,23 +154,26 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
     const sId = parseInt(selectedShopId, 10);
     const notesCopy = notes;
 
-    await runSaveDelivery(async () => {
-      try {
-        await createWholesaleSale({
+    await runSaveDelivery((onOptimistic) =>
+      createWholesaleSale(
+        {
           shopId: sId,
           saleDate,
           quantityPieces: pieces,
           totalSaleAmount: amount,
           notes: notesCopy || undefined,
-        });
-        setIsNewSaleOpen(false);
-        setQuantityPieces('');
-        setTotalSaleAmount('');
-        setNotes('');
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            setIsNewSaleOpen(false);
+            setQuantityPieces('');
+            setTotalSaleAmount('');
+            setNotes('');
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const columns: DataTableColumn<Sale>[] = [

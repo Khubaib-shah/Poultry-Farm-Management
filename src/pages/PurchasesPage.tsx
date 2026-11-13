@@ -38,6 +38,7 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
 }) => {
   const loads = useAppStore((s) => s.purchases);
   const suppliersList = useAppStore((s) => s.suppliers);
+  const resolvedIdMap = useAppStore((s) => s.resolvedIdMap);
   const loading = useAppStore((s) => s.loading);
   const initialized = useAppStore((s) => s.initialized);
   const createPurchase = useAppStore((s) => s.createPurchase);
@@ -78,10 +79,10 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
   const [damagedPieces, setDamagedPieces] = useState('0');
   const [receivingNotes, setReceivingNotes] = useState('');
 
-  const { isSubmitting: isSavingLoad, run: runSaveLoad } = useThrottledSubmit();
-  const { isSubmitting: isAddingExpense, run: runAddExpense } = useThrottledSubmit();
-  const { isSubmitting: isDeletingExpense, run: runDeleteExpense } = useThrottledSubmit();
-  const { isSubmitting: isReceivingStock, run: runReceiveStock } = useThrottledSubmit();
+  const { isSubmitting: isSavingLoad, runOptimistic: runSaveLoad } = useThrottledSubmit();
+  const { isSubmitting: isAddingExpense, runOptimistic: runAddExpense } = useThrottledSubmit();
+  const { isSubmitting: isDeletingExpense, runOptimistic: runDeleteExpense } = useThrottledSubmit();
+  const { isSubmitting: isReceivingStock, runOptimistic: runReceiveStock } = useThrottledSubmit();
 
   useEffect(() => {
     if (suppliersList.length > 0 && !supplierId) {
@@ -89,26 +90,37 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
     }
   }, [suppliersList, supplierId]);
 
-  // Live selected load from Zustand store so details update immediately
+  // Live selected load from Zustand store so details update immediately even after tempId -> realId swap
   const loadDetails = useMemo(
-    () => (selectedLoadId ? loads.find((l) => l.id === selectedLoadId) || null : null),
-    [loads, selectedLoadId]
+    () =>
+      selectedLoadId
+        ? loads.find((l) => l.id === selectedLoadId || l.id === resolvedIdMap[selectedLoadId]) ||
+          null
+        : null,
+    [loads, selectedLoadId, resolvedIdMap]
   );
 
   const handleCreateLoad = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplierId || !totalWeightKg || !purchaseAmount) {
-      onShowToast('Please fill all required fields', 'error');
-      return;
-    }
-
     const supId = parseInt(supplierId, 10);
     const weight = parseFloat(totalWeightKg);
     const amt = parseFloat(purchaseAmount);
 
-    await runSaveLoad(async () => {
-      try {
-        await createPurchase({
+    if (
+      !supplierId ||
+      !Number.isFinite(supId) ||
+      !Number.isFinite(weight) ||
+      weight <= 0 ||
+      !Number.isFinite(amt) ||
+      amt <= 0
+    ) {
+      onShowToast('Please fill all required fields with valid numbers', 'error');
+      return;
+    }
+
+    await runSaveLoad((onOptimistic) =>
+      createPurchase(
+        {
           supplierId: supId,
           purchaseDate,
           totalWeightKg: weight,
@@ -116,61 +128,68 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
           vehicleNumber: vehicleNumber || undefined,
           driverName: driverName || undefined,
           notes: notes || undefined,
-        });
-        setIsNewLoadOpen(false);
-        setTotalWeightKg('');
-        setPurchaseAmount('');
-        setVehicleNumber('');
-        setDriverName('');
-        setNotes('');
-      } catch {
-        // store rolls back & shows toast
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            setIsNewLoadOpen(false);
+            setTotalWeightKg('');
+            setPurchaseAmount('');
+            setVehicleNumber('');
+            setDriverName('');
+            setNotes('');
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const handleAddLoadExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLoadId || !expenseAmount || parseFloat(expenseAmount) <= 0) {
+    const amt = parseFloat(expenseAmount);
+    const activeLoadId = loadDetails?.id ?? selectedLoadId;
+    if (!activeLoadId || !Number.isFinite(amt) || amt <= 0) {
       onShowToast('Please enter a valid expense amount', 'error');
       return;
     }
 
-    const loadId = selectedLoadId;
-    const amt = parseFloat(expenseAmount);
     const desc = expenseDesc;
 
-    await runAddExpense(async () => {
-      try {
-        await addLoadExpense(loadId, {
+    await runAddExpense((onOptimistic) =>
+      addLoadExpense(
+        activeLoadId,
+        {
           category: expenseCategory,
           amount: amt,
           expenseDate,
           description: desc || undefined,
-        });
-        setExpenseAmount('');
-        setExpenseDesc('');
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            setExpenseAmount('');
+            setExpenseDesc('');
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const handleDeleteExpense = async (expenseId: number) => {
-    if (!selectedLoadId || isDeletingExpense) return;
+    const activeLoadId = loadDetails?.id ?? selectedLoadId;
+    if (!activeLoadId || isDeletingExpense) return;
     if (confirmDeleteExpId !== expenseId) {
       setConfirmDeleteExpId(expenseId);
       return;
     }
-    const loadId = selectedLoadId;
-    await runDeleteExpense(async () => {
-      setConfirmDeleteExpId(null);
-      try {
-        await deleteLoadExpense(loadId, expenseId);
-      } catch {
-        // handled by store
-      }
-    });
+    await runDeleteExpense((onOptimistic) =>
+      deleteLoadExpense(activeLoadId, expenseId, {
+        onOptimistic: () => {
+          setConfirmDeleteExpId(null);
+          onOptimistic();
+        },
+      })
+    );
   };
 
   const openReceivingForm = (load: PurchaseLoad) => {
@@ -192,20 +211,25 @@ export const PurchasesPage: React.FC<PurchasesPageProps> = ({
     }
 
     const targetId = receivingLoad.id;
-    await runReceiveStock(async () => {
-      try {
-        await receiveStock(targetId, {
+    await runReceiveStock((onOptimistic) =>
+      receiveStock(
+        targetId,
+        {
           receivingDate: recvDate,
           receivedPieces: pieces,
           deadPieces: parseInt(deadPieces || '0', 10),
           damagedPieces: parseInt(damagedPieces || '0', 10),
           notes: receivingNotes || undefined,
-        });
-        setIsReceivingOpen(false);
-      } catch {
-        // handled by store
-      }
-    });
+        },
+        {
+          onOptimistic: () => {
+            setIsReceivingOpen(false);
+            setReceivingLoad(null);
+            onOptimistic();
+          },
+        }
+      )
+    );
   };
 
   const filteredLoads = useMemo(() => {
