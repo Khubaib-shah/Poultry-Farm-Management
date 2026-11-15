@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getLocalPakistanDate,
+  shiftPakistanDate,
   getPeriodRange,
   computeDashboardFromCollections,
   computeReportFromCollections,
@@ -368,4 +369,123 @@ test('computeReportFromCollections mirrors Profit & Loss, stock valuation, and o
   assert.equal(report.stockValuation?.totalValue, 482000);
   assert.equal(report.expensesByCategory['RENT'], 5000);
   assert.equal(report.expensesByCategory['ICE'], 2500);
+});
+
+test('PKT midnight rollover computes 2026-11-16 at 19:40Z and includes wholesale deliveries & bills', () => {
+  const pktMidnightInstant = new Date('2026-11-15T19:40:17.000Z'); // 2026-11-16 00:40:17 PKT
+  assert.equal(getLocalPakistanDate(pktMidnightInstant), '2026-11-16');
+  assert.equal(shiftPakistanDate(pktMidnightInstant, -1), '2026-11-15');
+  assert.deepEqual(getPeriodRange('last7days', undefined, undefined, pktMidnightInstant), {
+    startDate: '2026-11-10',
+    endDate: '2026-11-16',
+  });
+  assert.deepEqual(getPeriodRange('thismonth', undefined, undefined, pktMidnightInstant), {
+    startDate: '2026-11-01',
+    endDate: '2026-11-16',
+  });
+
+  const data = buildSampleCollections();
+  const midnightSales: Sale[] = [
+    {
+      id: 34,
+      invoiceNumber: 'INV-20261115-0034',
+      saleType: 'OWN_SHOP',
+      shopId: null,
+      shopName: null,
+      saleDate: '2026-11-15',
+      totalPieces: 3,
+      sellingPricePerPiece: '116.67',
+      costPerPiece: '99.36',
+      profitPerPiece: '17.31',
+      totalAmount: '350',
+      totalCost: '298.08',
+      totalProfit: '51.92',
+      notes: null,
+      createdAt: NOW_ISO,
+    },
+    {
+      id: 35,
+      invoiceNumber: 'WHL-20261116-0035',
+      saleType: 'WHOLESALE',
+      shopId: 1,
+      shopName: 'Shafique Chicken Center',
+      saleDate: '2026-11-16',
+      totalPieces: 100,
+      sellingPricePerPiece: '105',
+      costPerPiece: '99.36',
+      profitPerPiece: '5.64',
+      totalAmount: '10500',
+      totalCost: '9936',
+      totalProfit: '564',
+      notes: null,
+      createdAt: NOW_ISO,
+    },
+    {
+      id: 36,
+      invoiceNumber: 'WHL-20261116-0036',
+      saleType: 'WHOLESALE',
+      shopId: 2,
+      shopName: 'Another Shop',
+      saleDate: '2026-11-16',
+      totalPieces: 20,
+      sellingPricePerPiece: '100',
+      costPerPiece: '99.36',
+      profitPerPiece: '0.64',
+      totalAmount: '2000',
+      totalCost: '1987.20',
+      totalProfit: '12.80',
+      notes: null,
+      createdAt: NOW_ISO,
+    },
+  ];
+  const midnightExpenses: BusinessExpense[] = [
+    {
+      id: 99,
+      category: 'Electricity',
+      amount: '300',
+      expenseDate: '2026-11-16',
+      paymentMethod: 'CASH',
+      description: 'Shop bill',
+      createdAt: NOW_ISO,
+    },
+  ];
+
+  const dash = computeDashboardFromCollections({
+    period: 'last7days',
+    chartDaysCount: 7,
+    sales: midnightSales,
+    purchases: data.purchases,
+    batches: data.batches,
+    suppliers: data.suppliers,
+    expenses: midnightExpenses,
+    workerPayments: [],
+    baseDate: pktMidnightInstant,
+  });
+
+  assert.equal(dash.endDate, '2026-11-16');
+  assert.equal(dash.kpis.revenue, 12850);
+  assert.equal(dash.kpis.ownShopRevenue, 350);
+  assert.equal(dash.kpis.wholesaleRevenue, 12500);
+  assert.equal(dash.kpis.totalPiecesSold, 123);
+  assert.equal(dash.kpis.generalExpenses, 300);
+  assert.equal(dash.kpis.netProfit, 328.72);
+  assert.equal(dash.charts.daily[6].date, '11-16');
+  assert.equal(dash.charts.daily[6].revenue, 12500);
+
+  const monthRange = getPeriodRange('thismonth', undefined, undefined, pktMidnightInstant);
+  const report = computeReportFromCollections({
+    startDate: monthRange.startDate,
+    endDate: monthRange.endDate,
+    sales: midnightSales,
+    purchases: data.purchases,
+    batches: data.batches,
+    expenses: midnightExpenses,
+    workerPayments: [],
+    dealerTransactions: [],
+  });
+  assert.equal(report.summary.totalRevenue, 12850);
+  assert.equal(report.summary.ownShopRevenue, 350);
+  assert.equal(report.summary.wholesaleRevenue, 12500);
+  assert.equal(report.sales.filter((s) => s.saleType === 'WHOLESALE').length, 2);
+  assert.equal(report.generalExpenses.length, 1);
 });

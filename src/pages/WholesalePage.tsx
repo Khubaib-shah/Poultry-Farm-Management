@@ -279,7 +279,10 @@ export const WholesalePage: React.FC<WholesalePageProps> = ({ onShowToast }) => 
           </button>
           <button
             type="button"
-            onClick={() => setIsNewSaleOpen(true)}
+            onClick={() => {
+              setSaleDate(getLocalPakistanDate());
+              setIsNewSaleOpen(true);
+            }}
             className="min-h-[40px] inline-flex items-center justify-center px-4 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4 mr-1.5" />

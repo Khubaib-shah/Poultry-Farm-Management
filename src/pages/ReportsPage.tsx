@@ -15,7 +15,11 @@ import * as XLSX from 'xlsx';
 import { AnimatePresence, motion } from 'motion/react';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
-import { computeReportFromCollections, getLocalPakistanDate } from '../utils/syncCalculations.ts';
+import {
+  computeReportFromCollections,
+  getLocalPakistanDate,
+  getPeriodRange,
+} from '../utils/syncCalculations.ts';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import {
   Sale,
@@ -42,8 +46,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
 
   const todayStr = getLocalPakistanDate();
   const [rangeType, setRangeType] = useState<'today' | 'yesterday' | 'weekly' | 'monthly' | 'all' | 'custom'>('monthly');
-  const [startDate, setStartDate] = useState(`${todayStr.substring(0, 7)}-01`);
-  const [endDate, setEndDate] = useState(todayStr);
+  const [startDate, setStartDate] = useState(() => `${getLocalPakistanDate().substring(0, 7)}-01`);
+  const [endDate, setEndDate] = useState(() => getLocalPakistanDate());
   const [activeDetailTab, setActiveDetailTab] = useState<
     'sales' | 'purchases' | 'expenses' | 'wages' | 'dealers'
   >('sales');
@@ -53,31 +57,35 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
 
   const handleSelectPreset = (type: 'today' | 'yesterday' | 'weekly' | 'monthly' | 'all') => {
     setRangeType(type);
-    const now = new Date();
-    let s = todayStr;
-    let e = todayStr;
-
-    if (type === 'yesterday') {
-      const y = new Date(now);
-      y.setDate(y.getDate() - 1);
-      s = getLocalPakistanDate(y);
-      e = s;
-    } else if (type === 'weekly') {
-      const w = new Date(now);
-      w.setDate(w.getDate() - 6);
-      s = getLocalPakistanDate(w);
-      e = todayStr;
-    } else if (type === 'monthly') {
-      s = `${todayStr.substring(0, 7)}-01`;
-      e = todayStr;
-    } else if (type === 'all') {
-      s = '2020-01-01';
-      e = '2099-12-31';
+    if (type === 'all') {
+      setStartDate('2020-01-01');
+      setEndDate('2099-12-31');
+      return;
     }
 
-    setStartDate(s);
-    setEndDate(e);
+    const presetMap = {
+      today: 'today',
+      yesterday: 'yesterday',
+      weekly: 'last7days',
+      monthly: 'thismonth',
+    } as const;
+    const range = getPeriodRange(presetMap[type]);
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
   };
+
+  React.useEffect(() => {
+    if (rangeType === 'custom' || rangeType === 'all') return;
+    const presetMap = {
+      today: 'today',
+      yesterday: 'yesterday',
+      weekly: 'last7days',
+      monthly: 'thismonth',
+    } as const;
+    const range = getPeriodRange(presetMap[rangeType]);
+    setStartDate(range.startDate);
+    setEndDate(range.endDate);
+  }, [todayStr, rangeType]);
 
   const data = useMemo(
     () =>

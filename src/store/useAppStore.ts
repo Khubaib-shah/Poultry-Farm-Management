@@ -24,6 +24,7 @@ import {
 } from '../utils/poultryMath.ts';
 import { ToastMessage } from '../components/common/Toast.tsx';
 import { createStoreMutationGuard } from '../utils/submitThrottle.ts';
+import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
 
 export interface OptimisticMutationOptions<T = void> {
   onOptimistic?: (optimisticValue: T) => void;
@@ -410,8 +411,12 @@ export const useAppStore = create<AppStore>((set, get) => {
     },
 
     refreshInBackground: async () => {
+      const epochBeforeFetch = mutationEpoch;
       try {
         const data = await api.getBootstrap();
+        if (mutationEpoch !== epochBeforeFetch || get().syncingCount > 0) {
+          return;
+        }
         set({
           suppliers: data.suppliers,
           purchases: data.purchases,
@@ -576,7 +581,7 @@ export const useAppStore = create<AppStore>((set, get) => {
       mutationGuard.run('addLoadExpense', { loadId, ...data }, async () => {
         const snapshot = takeSnapshot(get());
         const tempId = createTempId();
-        const expDate = data.expenseDate || new Date().toISOString().split('T')[0];
+        const expDate = data.expenseDate || getLocalPakistanDate();
 
         const newExp = {
           id: tempId,
@@ -1248,7 +1253,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             id: txTempId,
             supplierId: tempId,
             supplierName: data.name,
-            transactionDate: nowIso.split('T')[0],
+            transactionDate: getLocalPakistanDate(),
             transactionType: opening > 0 ? 'PURCHASE_DEBIT' : 'PAYMENT_CREDIT',
             debitAmount: opening > 0 ? opening.toFixed(2) : '0.00',
             creditAmount: opening < 0 ? Math.abs(opening).toFixed(2) : '0.00',
@@ -1327,7 +1332,7 @@ export const useAppStore = create<AppStore>((set, get) => {
         const targetSupplierId = supplier?.id ?? data.supplierId;
         const prevBal = Number(supplier?.currentBalance ?? supplier?.openingBalance ?? 0);
         const newBal = Number((prevBal - data.amount).toFixed(2));
-        const txDate = data.transactionDate || new Date().toISOString().split('T')[0];
+        const txDate = data.transactionDate || getLocalPakistanDate();
         const tempId = createTempId();
 
         const optimisticTx: DealerTransaction = {
@@ -1547,7 +1552,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           (w) => w.id === workerId || w.id === get().resolvedIdMap[workerId]
         );
         const targetWorkerId = worker?.id ?? workerId;
-        const pDate = data.paymentDate || new Date().toISOString().split('T')[0];
+        const pDate = data.paymentDate || getLocalPakistanDate();
         const tempId = createTempId();
 
         const optimisticPmt: WorkerPayment = {
@@ -1619,7 +1624,7 @@ export const useAppStore = create<AppStore>((set, get) => {
     createExpense: (data, options) =>
       mutationGuard.run('createExpense', data, () => {
         const snapshot = takeSnapshot(get());
-        const expDate = data.expenseDate || new Date().toISOString().split('T')[0];
+        const expDate = data.expenseDate || getLocalPakistanDate();
         const tempId = createTempId();
 
         const optimisticExp: BusinessExpense = {

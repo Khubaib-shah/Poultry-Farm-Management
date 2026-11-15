@@ -16,10 +16,16 @@ import {
   calculateLandedCost,
 } from './poultryMath.ts';
 
+const PKT_OFFSET_MS = 5 * 3600000;
+const DAY_MS = 24 * 3600000;
+
 export function getLocalPakistanDate(d: Date = new Date()): string {
-  const utc = d.getTime() + d.getTimezoneOffset() * 60000;
-  const pktDate = new Date(utc + 5 * 3600000);
+  const pktDate = new Date(d.getTime() + PKT_OFFSET_MS);
   return pktDate.toISOString().split('T')[0];
+}
+
+export function shiftPakistanDate(d: Date = new Date(), deltaDays = 0): string {
+  return getLocalPakistanDate(new Date(d.getTime() + deltaDays * DAY_MS));
 }
 
 export function getPeriodRange(
@@ -33,14 +39,10 @@ export function getPeriodRange(
   let endDate = todayStr;
 
   if (period === 'yesterday') {
-    const y = new Date(baseDate);
-    y.setDate(y.getDate() - 1);
-    startDate = getLocalPakistanDate(y);
+    startDate = shiftPakistanDate(baseDate, -1);
     endDate = startDate;
   } else if (period === 'last7days') {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() - 6);
-    startDate = getLocalPakistanDate(d);
+    startDate = shiftPakistanDate(baseDate, -6);
     endDate = todayStr;
   } else if (period === 'thismonth') {
     startDate = `${todayStr.substring(0, 7)}-01`;
@@ -141,9 +143,7 @@ export function computeDashboardFromCollections(params: {
   // Build chart days
   const daily: DashboardData['charts']['daily'] = [];
   for (let i = chartDaysCount - 1; i >= 0; i--) {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() - i);
-    const dayStr = getLocalPakistanDate(d);
+    const dayStr = shiftPakistanDate(baseDate, -i);
 
     const daySales = sales.filter((s) => s.saleDate === dayStr);
     const rev = daySales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);

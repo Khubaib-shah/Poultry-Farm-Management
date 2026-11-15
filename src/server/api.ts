@@ -86,12 +86,17 @@ apiRouter.use(async (_req, res, next) => {
   }
 });
 
+const PKT_OFFSET_MS = 5 * 3600000;
+const DAY_MS = 24 * 3600000;
+
 // Helper to format Date to YYYY-MM-DD in Pakistan Standard Time (UTC+5)
 export function getPakistanDate(d: Date = new Date()): string {
-  // PKT is UTC + 5
-  const utc = d.getTime() + d.getTimezoneOffset() * 60000;
-  const pktDate = new Date(utc + 5 * 3600000);
+  const pktDate = new Date(d.getTime() + PKT_OFFSET_MS);
   return pktDate.toISOString().split('T')[0];
+}
+
+function shiftPakistanDate(d: Date = new Date(), deltaDays = 0): string {
+  return getPakistanDate(new Date(d.getTime() + deltaDays * DAY_MS));
 }
 
 // -------------------------------------------------------------
@@ -1265,6 +1270,11 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
       });
     }
 
+    const [targetShop] = await db.select().from(shops).where(eq(shops.id, sId));
+    if (!targetShop) {
+      return res.status(404).json({ error: 'Selected shop not found' });
+    }
+
     // Available batches FIFO
     const availableBatches = await db
       .select({
@@ -1351,11 +1361,11 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
         unitCost: item.unitCost.toFixed(2),
         referenceType: 'SHOP_DISTRIBUTION',
         referenceId: savedSale.id,
-        notes: `Wholesale delivery ${invoiceNumber} to Shop ID ${sId}: ${item.quantity} pcs`,
+        notes: `Wholesale delivery ${invoiceNumber} to ${targetShop.shopName}: ${item.quantity} pcs`,
       });
     }
 
-    res.status(201).json({ sale: savedSale, summary: metrics });
+    res.status(201).json({ sale: { ...savedSale, shopName: targetShop.shopName }, summary: metrics });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1609,19 +1619,16 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
     const customStart = req.query.startDate as string;
     const customEnd = req.query.endDate as string;
 
-    const todayStr = getPakistanDate();
+    const now = new Date();
+    const todayStr = getPakistanDate(now);
     let startDate = todayStr;
     let endDate = todayStr;
 
     if (period === 'yesterday') {
-      const y = new Date();
-      y.setDate(y.getDate() - 1);
-      startDate = getPakistanDate(y);
+      startDate = shiftPakistanDate(now, -1);
       endDate = startDate;
     } else if (period === 'last7days') {
-      const d = new Date();
-      d.setDate(d.getDate() - 6);
-      startDate = getPakistanDate(d);
+      startDate = shiftPakistanDate(now, -6);
       endDate = todayStr;
     } else if (period === 'thismonth') {
       startDate = `${todayStr.substring(0, 7)}-01`;
@@ -1739,11 +1746,14 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
         invoiceNumber: sales.invoiceNumber,
         saleType: sales.saleType,
         saleDate: sales.saleDate,
+        shopId: sales.shopId,
+        shopName: shops.shopName,
         totalPieces: sales.totalPieces,
         totalAmount: sales.totalAmount,
         totalProfit: sales.totalProfit,
       })
       .from(sales)
+      .leftJoin(shops, eq(sales.shopId, shops.id))
       .orderBy(desc(sales.saleDate), desc(sales.id))
       .limit(5);
 
@@ -1794,9 +1804,7 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
 
     // Build last 7 days chart
     for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dayStr = getPakistanDate(d);
+      const dayStr = shiftPakistanDate(now, -i);
 
       const daySales = await db
         .select({
@@ -2100,14 +2108,10 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     await db.delete(suppliers);
   }
 
-  const todayStr = getPakistanDate();
-  const d1 = new Date();
-  d1.setDate(d1.getDate() - 3);
-  const date3DaysAgo = getPakistanDate(d1);
-
-  const d2 = new Date();
-  d2.setDate(d2.getDate() - 1);
-  const dateYesterday = getPakistanDate(d2);
+  const now = new Date();
+  const todayStr = getPakistanDate(now);
+  const date3DaysAgo = shiftPakistanDate(now, -3);
+  const dateYesterday = shiftPakistanDate(now, -1);
 
   // 1. Create Suppliers in Punjab
   const [sup1] = await db
