@@ -8,6 +8,7 @@ import {
   serial,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 // 1. Users
@@ -24,6 +25,7 @@ export const users = pgTable('users', {
 // 2. Suppliers
 export const suppliers = pgTable('suppliers', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   name: text('name').notNull(),
   phone: text('phone'),
   address: text('address'),
@@ -36,6 +38,7 @@ export const suppliers = pgTable('suppliers', {
 // 3. Vehicles
 export const vehicles = pgTable('vehicles', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   vehicleNumber: text('vehicle_number').notNull(),
   driverName: text('driver_name'),
   driverPhone: text('driver_phone'),
@@ -44,25 +47,36 @@ export const vehicles = pgTable('vehicles', {
 });
 
 // 4. Purchase Loads
-export const purchaseLoads = pgTable('purchase_loads', {
-  id: serial('id').primaryKey(),
-  loadNumber: text('load_number').notNull().unique(),
-  supplierId: integer('supplier_id')
-    .references(() => suppliers.id)
-    .notNull(),
-  purchaseDate: date('purchase_date').notNull(), // YYYY-MM-DD
-  totalWeightKg: numeric('total_weight_kg', { precision: 10, scale: 2 }).notNull(),
-  purchaseAmount: numeric('purchase_amount', { precision: 14, scale: 2 }).notNull(),
-  vehicleNumber: text('vehicle_number'),
-  driverName: text('driver_name'),
-  status: text('status').default('RECEIVED').notNull(), // PENDING_RECEIVING, RECEIVED, CLOSED
-  notes: text('notes'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const purchaseLoads = pgTable(
+  'purchase_loads',
+  {
+    id: serial('id').primaryKey(),
+    workspace: text('workspace').default('real').notNull(),
+    loadNumber: text('load_number').notNull(),
+    supplierId: integer('supplier_id')
+      .references(() => suppliers.id)
+      .notNull(),
+    purchaseDate: date('purchase_date').notNull(), // YYYY-MM-DD
+    totalWeightKg: numeric('total_weight_kg', { precision: 10, scale: 2 }).notNull(),
+    purchaseAmount: numeric('purchase_amount', { precision: 14, scale: 2 }).notNull(),
+    vehicleNumber: text('vehicle_number'),
+    driverName: text('driver_name'),
+    status: text('status').default('RECEIVED').notNull(), // PENDING_RECEIVING, RECEIVED, CLOSED
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    workspaceLoadIdx: uniqueIndex('purchase_loads_workspace_load_number_idx').on(
+      table.workspace,
+      table.loadNumber
+    ),
+  })
+);
 
 // 5. Load Expenses
 export const loadExpenses = pgTable('load_expenses', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   purchaseLoadId: integer('purchase_load_id')
     .references(() => purchaseLoads.id, { onDelete: 'cascade' })
     .notNull(),
@@ -74,32 +88,43 @@ export const loadExpenses = pgTable('load_expenses', {
 });
 
 // 6. Stock Batches
-export const stockBatches = pgTable('stock_batches', {
-  id: serial('id').primaryKey(),
-  batchNumber: text('batch_number').notNull().unique(),
-  purchaseLoadId: integer('purchase_load_id')
-    .references(() => purchaseLoads.id)
-    .notNull()
-    .unique(),
-  receivingDate: date('receiving_date').notNull(),
-  receivedPieces: integer('received_pieces').notNull(),
-  deadPieces: integer('dead_pieces').default(0).notNull(),
-  damagedPieces: integer('damaged_pieces').default(0).notNull(),
-  originalSaleablePieces: integer('original_saleable_pieces').notNull(),
-  soldPieces: integer('sold_pieces').default(0).notNull(),
-  remainingPieces: integer('remaining_pieces').notNull(),
-  purchaseAmount: numeric('purchase_amount', { precision: 14, scale: 2 }).notNull(),
-  totalLoadExpenses: numeric('total_load_expenses', { precision: 14, scale: 2 }).default('0.00').notNull(),
-  totalLandedCost: numeric('total_landed_cost', { precision: 14, scale: 2 }).notNull(),
-  costPerPiece: numeric('cost_per_piece', { precision: 10, scale: 2 }).notNull(),
-  isClosed: boolean('is_closed').default(false).notNull(),
-  notes: text('notes'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const stockBatches = pgTable(
+  'stock_batches',
+  {
+    id: serial('id').primaryKey(),
+    workspace: text('workspace').default('real').notNull(),
+    batchNumber: text('batch_number').notNull(),
+    purchaseLoadId: integer('purchase_load_id')
+      .references(() => purchaseLoads.id)
+      .notNull()
+      .unique(),
+    receivingDate: date('receiving_date').notNull(),
+    receivedPieces: integer('received_pieces').notNull(),
+    deadPieces: integer('dead_pieces').default(0).notNull(),
+    damagedPieces: integer('damaged_pieces').default(0).notNull(),
+    originalSaleablePieces: integer('original_saleable_pieces').notNull(),
+    soldPieces: integer('sold_pieces').default(0).notNull(),
+    remainingPieces: integer('remaining_pieces').notNull(),
+    purchaseAmount: numeric('purchase_amount', { precision: 14, scale: 2 }).notNull(),
+    totalLoadExpenses: numeric('total_load_expenses', { precision: 14, scale: 2 }).default('0.00').notNull(),
+    totalLandedCost: numeric('total_landed_cost', { precision: 14, scale: 2 }).notNull(),
+    costPerPiece: numeric('cost_per_piece', { precision: 10, scale: 2 }).notNull(),
+    isClosed: boolean('is_closed').default(false).notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    workspaceBatchIdx: uniqueIndex('stock_batches_workspace_batch_number_idx').on(
+      table.workspace,
+      table.batchNumber
+    ),
+  })
+);
 
 // 7. Stock Movements
 export const stockMovements = pgTable('stock_movements', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   stockBatchId: integer('stock_batch_id')
     .references(() => stockBatches.id)
     .notNull(),
@@ -116,6 +141,7 @@ export const stockMovements = pgTable('stock_movements', {
 // 8. Dealer Ledger / Transactions
 export const dealerTransactions = pgTable('dealer_transactions', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   supplierId: integer('supplier_id')
     .references(() => suppliers.id)
     .notNull(),
@@ -134,6 +160,7 @@ export const dealerTransactions = pgTable('dealer_transactions', {
 // 9. Wholesale Shops
 export const shops = pgTable('shops', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   shopName: text('shop_name').notNull(),
   ownerName: text('owner_name'),
   phone: text('phone'),
@@ -143,26 +170,37 @@ export const shops = pgTable('shops', {
 });
 
 // 10. Sales
-export const sales = pgTable('sales', {
-  id: serial('id').primaryKey(),
-  invoiceNumber: text('invoice_number').notNull().unique(),
-  saleType: text('sale_type').notNull(), // OWN_SHOP, WHOLESALE
-  saleDate: date('sale_date').notNull(),
-  shopId: integer('shop_id').references(() => shops.id),
-  totalPieces: integer('total_pieces').notNull(),
-  totalAmount: numeric('total_amount', { precision: 14, scale: 2 }).notNull(),
-  totalCost: numeric('total_cost', { precision: 14, scale: 2 }).notNull(),
-  totalProfit: numeric('total_profit', { precision: 14, scale: 2 }).notNull(),
-  sellingPricePerPiece: numeric('selling_price_per_piece', { precision: 10, scale: 2 }).notNull(),
-  costPerPiece: numeric('cost_per_piece', { precision: 10, scale: 2 }).notNull(),
-  profitPerPiece: numeric('profit_per_piece', { precision: 10, scale: 2 }).notNull(),
-  notes: text('notes'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const sales = pgTable(
+  'sales',
+  {
+    id: serial('id').primaryKey(),
+    workspace: text('workspace').default('real').notNull(),
+    invoiceNumber: text('invoice_number').notNull(),
+    saleType: text('sale_type').notNull(), // OWN_SHOP, WHOLESALE
+    saleDate: date('sale_date').notNull(),
+    shopId: integer('shop_id').references(() => shops.id),
+    totalPieces: integer('total_pieces').notNull(),
+    totalAmount: numeric('total_amount', { precision: 14, scale: 2 }).notNull(),
+    totalCost: numeric('total_cost', { precision: 14, scale: 2 }).notNull(),
+    totalProfit: numeric('total_profit', { precision: 14, scale: 2 }).notNull(),
+    sellingPricePerPiece: numeric('selling_price_per_piece', { precision: 10, scale: 2 }).notNull(),
+    costPerPiece: numeric('cost_per_piece', { precision: 10, scale: 2 }).notNull(),
+    profitPerPiece: numeric('profit_per_piece', { precision: 10, scale: 2 }).notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    workspaceInvoiceIdx: uniqueIndex('sales_workspace_invoice_number_idx').on(
+      table.workspace,
+      table.invoiceNumber
+    ),
+  })
+);
 
 // 11. Sale Items (FIFO consumption mapping)
 export const saleItems = pgTable('sale_items', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   saleId: integer('sale_id')
     .references(() => sales.id, { onDelete: 'cascade' })
     .notNull(),
@@ -178,6 +216,7 @@ export const saleItems = pgTable('sale_items', {
 // 12. Workers
 export const workers = pgTable('workers', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   name: text('name').notNull(),
   phone: text('phone'),
   notes: text('notes'),
@@ -188,6 +227,7 @@ export const workers = pgTable('workers', {
 // 13. Worker Payments
 export const workerPayments = pgTable('worker_payments', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   workerId: integer('worker_id')
     .references(() => workers.id)
     .notNull(),
@@ -201,6 +241,7 @@ export const workerPayments = pgTable('worker_payments', {
 // 14. Business Expenses (General)
 export const businessExpenses = pgTable('business_expenses', {
   id: serial('id').primaryKey(),
+  workspace: text('workspace').default('real').notNull(),
   category: text('category').notNull(), // Electricity, Rent, Maintenance, Food, Tea, Cleaning, Other
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
   expenseDate: date('expense_date').notNull(),
@@ -210,13 +251,20 @@ export const businessExpenses = pgTable('business_expenses', {
 });
 
 // 15. Settings
-export const settings = pgTable('settings', {
-  id: serial('id').primaryKey(),
-  key: text('key').notNull().unique(),
-  value: text('value').notNull(),
-  description: text('description'),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const settings = pgTable(
+  'settings',
+  {
+    id: serial('id').primaryKey(),
+    workspace: text('workspace').default('real').notNull(),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+    description: text('description'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    workspaceKeyIdx: uniqueIndex('settings_workspace_key_idx').on(table.workspace, table.key),
+  })
+);
 
 // --- Relations ---
 

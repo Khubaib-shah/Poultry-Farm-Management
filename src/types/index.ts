@@ -279,10 +279,13 @@ export interface AppSettings {
   lowStockThreshold: string;
 }
 
+export type WorkspaceMode = 'real' | 'demo';
+
 export interface AuthUser {
   id: number;
   uid: string;
   email: string;
   name: string | null;
   role: string;
+  workspace?: WorkspaceMode;
 }

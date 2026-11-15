@@ -23,6 +23,23 @@ const REQUIRED_TABLES = [
   'settings',
 ];
 
+const WORKSPACE_TABLES = [
+  'suppliers',
+  'vehicles',
+  'purchase_loads',
+  'load_expenses',
+  'stock_batches',
+  'stock_movements',
+  'dealer_transactions',
+  'shops',
+  'sales',
+  'sale_items',
+  'workers',
+  'worker_payments',
+  'business_expenses',
+  'settings',
+];
+
 const SCHEMA_DDL = `
 CREATE TABLE IF NOT EXISTS "users" (
   "id" serial PRIMARY KEY NOT NULL,
@@ -36,6 +53,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 
 CREATE TABLE IF NOT EXISTS "suppliers" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "name" text NOT NULL,
   "phone" text,
   "address" text,
@@ -47,6 +65,7 @@ CREATE TABLE IF NOT EXISTS "suppliers" (
 
 CREATE TABLE IF NOT EXISTS "vehicles" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "vehicle_number" text NOT NULL,
   "driver_name" text,
   "driver_phone" text,
@@ -56,7 +75,8 @@ CREATE TABLE IF NOT EXISTS "vehicles" (
 
 CREATE TABLE IF NOT EXISTS "purchase_loads" (
   "id" serial PRIMARY KEY NOT NULL,
-  "load_number" text NOT NULL UNIQUE,
+  "workspace" text DEFAULT 'real' NOT NULL,
+  "load_number" text NOT NULL,
   "supplier_id" integer NOT NULL REFERENCES "suppliers"("id"),
   "purchase_date" date NOT NULL,
   "total_weight_kg" numeric(10, 2) NOT NULL,
@@ -70,6 +90,7 @@ CREATE TABLE IF NOT EXISTS "purchase_loads" (
 
 CREATE TABLE IF NOT EXISTS "load_expenses" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "purchase_load_id" integer NOT NULL REFERENCES "purchase_loads"("id") ON DELETE CASCADE,
   "category" text NOT NULL,
   "amount" numeric(12, 2) NOT NULL,
@@ -80,7 +101,8 @@ CREATE TABLE IF NOT EXISTS "load_expenses" (
 
 CREATE TABLE IF NOT EXISTS "stock_batches" (
   "id" serial PRIMARY KEY NOT NULL,
-  "batch_number" text NOT NULL UNIQUE,
+  "workspace" text DEFAULT 'real' NOT NULL,
+  "batch_number" text NOT NULL,
   "purchase_load_id" integer NOT NULL UNIQUE REFERENCES "purchase_loads"("id"),
   "receiving_date" date NOT NULL,
   "received_pieces" integer NOT NULL,
@@ -100,6 +122,7 @@ CREATE TABLE IF NOT EXISTS "stock_batches" (
 
 CREATE TABLE IF NOT EXISTS "stock_movements" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "stock_batch_id" integer NOT NULL REFERENCES "stock_batches"("id"),
   "movement_type" text NOT NULL,
   "quantity" integer NOT NULL,
@@ -113,6 +136,7 @@ CREATE TABLE IF NOT EXISTS "stock_movements" (
 
 CREATE TABLE IF NOT EXISTS "dealer_transactions" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "supplier_id" integer NOT NULL REFERENCES "suppliers"("id"),
   "transaction_date" date NOT NULL,
   "transaction_type" text NOT NULL,
@@ -128,6 +152,7 @@ CREATE TABLE IF NOT EXISTS "dealer_transactions" (
 
 CREATE TABLE IF NOT EXISTS "shops" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "shop_name" text NOT NULL,
   "owner_name" text,
   "phone" text,
@@ -138,7 +163,8 @@ CREATE TABLE IF NOT EXISTS "shops" (
 
 CREATE TABLE IF NOT EXISTS "sales" (
   "id" serial PRIMARY KEY NOT NULL,
-  "invoice_number" text NOT NULL UNIQUE,
+  "workspace" text DEFAULT 'real' NOT NULL,
+  "invoice_number" text NOT NULL,
   "sale_type" text NOT NULL,
   "sale_date" date NOT NULL,
   "shop_id" integer REFERENCES "shops"("id"),
@@ -155,6 +181,7 @@ CREATE TABLE IF NOT EXISTS "sales" (
 
 CREATE TABLE IF NOT EXISTS "sale_items" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "sale_id" integer NOT NULL REFERENCES "sales"("id") ON DELETE CASCADE,
   "stock_batch_id" integer NOT NULL REFERENCES "stock_batches"("id"),
   "quantity" integer NOT NULL,
@@ -165,6 +192,7 @@ CREATE TABLE IF NOT EXISTS "sale_items" (
 
 CREATE TABLE IF NOT EXISTS "workers" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "name" text NOT NULL,
   "phone" text,
   "notes" text,
@@ -174,6 +202,7 @@ CREATE TABLE IF NOT EXISTS "workers" (
 
 CREATE TABLE IF NOT EXISTS "worker_payments" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "worker_id" integer NOT NULL REFERENCES "workers"("id"),
   "amount" numeric(12, 2) NOT NULL,
   "payment_date" date NOT NULL,
@@ -184,6 +213,7 @@ CREATE TABLE IF NOT EXISTS "worker_payments" (
 
 CREATE TABLE IF NOT EXISTS "business_expenses" (
   "id" serial PRIMARY KEY NOT NULL,
+  "workspace" text DEFAULT 'real' NOT NULL,
   "category" text NOT NULL,
   "amount" numeric(12, 2) NOT NULL,
   "expense_date" date NOT NULL,
@@ -194,11 +224,46 @@ CREATE TABLE IF NOT EXISTS "business_expenses" (
 
 CREATE TABLE IF NOT EXISTS "settings" (
   "id" serial PRIMARY KEY NOT NULL,
-  "key" text NOT NULL UNIQUE,
+  "workspace" text DEFAULT 'real' NOT NULL,
+  "key" text NOT NULL,
   "value" text NOT NULL,
   "description" text,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
+`;
+
+const WORKSPACE_MIGRATION_SQL = `
+${WORKSPACE_TABLES.map(
+  (tbl) => `ALTER TABLE "${tbl}" ADD COLUMN IF NOT EXISTS "workspace" text DEFAULT 'real' NOT NULL;`
+).join('\n')}
+
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT con.conname, rel.relname
+    FROM pg_constraint con
+    JOIN pg_class rel ON rel.oid = con.conrelid
+    JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+    WHERE nsp.nspname = 'public'
+      AND con.contype = 'u'
+      AND array_length(con.conkey, 1) = 1
+      AND (
+        (rel.relname = 'purchase_loads' AND con.conkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = rel.oid AND attname = 'load_number'))
+        OR (rel.relname = 'stock_batches' AND con.conkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = rel.oid AND attname = 'batch_number'))
+        OR (rel.relname = 'sales' AND con.conkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = rel.oid AND attname = 'invoice_number'))
+        OR (rel.relname = 'settings' AND con.conkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = rel.oid AND attname = 'key'))
+      )
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I DROP CONSTRAINT IF EXISTS %I', r.relname, r.conname);
+  END LOOP;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "purchase_loads_workspace_load_number_idx" ON "purchase_loads" ("workspace", "load_number");
+CREATE UNIQUE INDEX IF NOT EXISTS "stock_batches_workspace_batch_number_idx" ON "stock_batches" ("workspace", "batch_number");
+CREATE UNIQUE INDEX IF NOT EXISTS "sales_workspace_invoice_number_idx" ON "sales" ("workspace", "invoice_number");
+CREATE UNIQUE INDEX IF NOT EXISTS "settings_workspace_key_idx" ON "settings" ("workspace", "key");
 `;
 
 export function ensureSchema(): Promise<void> {
@@ -218,6 +283,9 @@ export function ensureSchema(): Promise<void> {
 
       // Ensure password_hash column exists on pre-existing databases
       await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "password_hash" text;`);
+
+      // Ensure workspace isolation columns and composite unique constraints exist on pre-existing databases
+      await pool.query(WORKSPACE_MIGRATION_SQL);
 
       // Idempotently ensure the owner@checkin.me user exists with a scrypt password hash
       const existingOwner = await pool.query<{ id: number; password_hash: string | null }>(
@@ -242,6 +310,24 @@ export function ensureSchema(): Promise<void> {
         await pool.query(
           `UPDATE "users" SET "password_hash" = $1, "name" = COALESCE("name", 'Owner'), "role" = 'owner' WHERE "id" = $2`,
           [passwordHash, existingOwner.rows[0].id]
+        );
+      }
+
+      // Idempotently ensure isolated demo@checkin.me user exists (used by View Demo mode)
+      const existingDemo = await pool.query<{ id: number }>(
+        `SELECT id FROM "users" WHERE "uid" = $1 LIMIT 1`,
+        ['demo-checkin-me']
+      );
+      if (existingDemo.rows.length === 0) {
+        const demoHash = hashPassword('DemoSandbox@@2026');
+        await pool.query(
+          `INSERT INTO "users" ("uid", "email", "password_hash", "name", "role")
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT ("uid") DO UPDATE
+             SET "email" = EXCLUDED."email",
+                 "name" = EXCLUDED."name",
+                 "role" = 'demo'`,
+          ['demo-checkin-me', 'demo@checkin.me', demoHash, 'Demo Account', 'demo']
         );
       }
     })().catch((err) => {

@@ -5,14 +5,10 @@ import { ToastContainer } from './components/common/Toast.tsx';
 import { OfflineIndicator } from './components/common/OfflineIndicator.tsx';
 import { ErrorBoundary } from './components/common/ErrorBoundary.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
-import { PurchasesPage } from './pages/PurchasesPage.tsx';
-import { SuppliersPage } from './pages/SuppliersPage.tsx';
-import { InventoryPage } from './pages/InventoryPage.tsx';
-import { WholesalePage } from './pages/WholesalePage.tsx';
-import { OwnShopSalesPage } from './pages/OwnShopSalesPage.tsx';
-import { DealerLedgerPage } from './pages/DealerLedgerPage.tsx';
-import { WorkersPage } from './pages/WorkersPage.tsx';
-import { ExpensesPage } from './pages/ExpensesPage.tsx';
+import { TrucksStockPage, TrucksStockSubTab } from './pages/TrucksStockPage.tsx';
+import { SalesPage, SalesSubTab } from './pages/SalesPage.tsx';
+import { DealersPage } from './pages/DealersPage.tsx';
+import { ExpensesStaffPage } from './pages/ExpensesStaffPage.tsx';
 import { ReportsPage } from './pages/ReportsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
@@ -27,12 +23,13 @@ interface AppShellContentProps {
 
 function AppShellContent({ currentUser, onLogout }: AppShellContentProps) {
   const [currentTab, setCurrentTab] = useState<NavItemKey>('dashboard');
-  const [selectedSupplierForLedger, setSelectedSupplierForLedger] = useState<number | undefined>(
-    undefined
-  );
+  const [trucksStockSubTab, setTrucksStockSubTab] = useState<TrucksStockSubTab>('trucks');
+  const [salesSubTab, setSalesSubTab] = useState<SalesSubTab>('walk-in');
   const [initialOpenNewLoad, setInitialOpenNewLoad] = useState(false);
 
   const bootstrap = useAppStore((s) => s.bootstrap);
+  const setWorkspace = useAppStore((s) => s.setWorkspace);
+  const invalidateDataCache = useAppStore((s) => s.invalidateDataCache);
   const batches = useAppStore((s) => s.batches);
   const purchases = useAppStore((s) => s.purchases);
   const settings = useAppStore((s) => s.settings);
@@ -43,8 +40,9 @@ function AppShellContent({ currentUser, onLogout }: AppShellContentProps) {
   const clearGlobalError = useAppStore((s) => s.clearGlobalError);
 
   useEffect(() => {
+    setWorkspace(currentUser.workspace || 'real');
     void bootstrap({ force: true });
-  }, [bootstrap]);
+  }, [bootstrap, setWorkspace, currentUser.workspace]);
 
   const availableStock = useMemo(
     () =>
@@ -59,14 +57,28 @@ function AppShellContent({ currentUser, onLogout }: AppShellContentProps) {
     [purchases]
   );
 
+  const handleNavigate = (tab: NavItemKey, subTab?: string) => {
+    setInitialOpenNewLoad(false);
+    if (tab === 'trucks-stock' && subTab) {
+      setTrucksStockSubTab(subTab as TrucksStockSubTab);
+    }
+    if (tab === 'sales' && subTab) {
+      setSalesSubTab(subTab as SalesSubTab);
+    }
+    setCurrentTab(tab);
+  };
+
   const handleQuickAction = (action: 'new-sale' | 'new-load' | 'calculator') => {
     if (action === 'new-sale') {
-      setCurrentTab('own-shop-sales');
+      setSalesSubTab('walk-in');
+      setCurrentTab('sales');
     } else if (action === 'new-load') {
+      setTrucksStockSubTab('trucks');
       setInitialOpenNewLoad(true);
-      setCurrentTab('purchases');
+      setCurrentTab('trucks-stock');
     } else if (action === 'calculator') {
-      setCurrentTab('inventory');
+      setTrucksStockSubTab('calculator');
+      setCurrentTab('trucks-stock');
     }
   };
 
@@ -82,56 +94,48 @@ function AppShellContent({ currentUser, onLogout }: AppShellContentProps) {
       businessName={settings.businessName}
       globalError={globalError}
       onDismissError={clearGlobalError}
-      onRetrySync={() => void bootstrap({ force: true })}
+      onRetrySync={() => {
+        invalidateDataCache();
+        void bootstrap({ force: true });
+      }}
       onQuickAction={handleQuickAction}
       currentUser={currentUser}
       onLogout={onLogout}
     >
       {currentTab === 'dashboard' && (
         <DashboardPage
-          onNavigate={(tab) => setCurrentTab(tab)}
-          onOpenQuickSale={() => setCurrentTab('own-shop-sales')}
+          onNavigate={handleNavigate}
+          onOpenQuickSale={() => {
+            setSalesSubTab('walk-in');
+            setCurrentTab('sales');
+          }}
           onOpenNewLoad={() => {
+            setTrucksStockSubTab('trucks');
             setInitialOpenNewLoad(true);
-            setCurrentTab('purchases');
+            setCurrentTab('trucks-stock');
           }}
         />
       )}
 
-      {currentTab === 'purchases' && (
-        <PurchasesPage onShowToast={addToast} initialOpenNewModal={initialOpenNewLoad} />
-      )}
-
-      {currentTab === 'suppliers' && (
-        <SuppliersPage
+      {currentTab === 'trucks-stock' && (
+        <TrucksStockPage
           onShowToast={addToast}
-          onOpenLedgerTab={(supId) => {
-            setSelectedSupplierForLedger(supId);
-            setCurrentTab('dealer-ledger');
-          }}
+          initialSubTab={trucksStockSubTab}
+          initialOpenNewModal={initialOpenNewLoad}
         />
       )}
 
-      {currentTab === 'inventory' && <InventoryPage onShowToast={addToast} />}
-
-      {currentTab === 'shops' && <WholesalePage onShowToast={addToast} />}
-
-      {currentTab === 'own-shop-sales' && <OwnShopSalesPage onShowToast={addToast} />}
-
-      {currentTab === 'dealer-ledger' && (
-        <DealerLedgerPage
-          onShowToast={addToast}
-          selectedSupplierId={selectedSupplierForLedger}
-        />
+      {currentTab === 'sales' && (
+        <SalesPage onShowToast={addToast} initialSubTab={salesSubTab} />
       )}
 
-      {currentTab === 'workers' && <WorkersPage onShowToast={addToast} />}
+      {currentTab === 'dealers' && <DealersPage onShowToast={addToast} />}
 
-      {currentTab === 'expenses' && <ExpensesPage onShowToast={addToast} />}
+      {currentTab === 'expenses-staff' && <ExpensesStaffPage onShowToast={addToast} />}
 
       {currentTab === 'reports' && <ReportsPage onShowToast={addToast} />}
 
-      {currentTab === 'settings' && <SettingsPage />}
+      {currentTab === 'settings' && <SettingsPage currentUser={currentUser} />}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <OfflineIndicator />
@@ -145,6 +149,7 @@ function AuthenticatedApp() {
   );
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const resetStore = useAppStore((s) => s.resetStore);
+  const setWorkspace = useAppStore((s) => s.setWorkspace);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -165,6 +170,7 @@ function AuthenticatedApp() {
       .then((res) => {
         if (!active) return;
         if (res.user) {
+          setWorkspace(res.user.workspace || 'real');
           setCurrentUser(res.user);
           setAuthStatus('authenticated');
         } else {
@@ -216,6 +222,7 @@ function AuthenticatedApp() {
     return (
       <LoginPage
         onLoginSuccess={(user) => {
+          setWorkspace(user.workspace || 'real');
           setCurrentUser(user);
           setAuthStatus('authenticated');
         }}

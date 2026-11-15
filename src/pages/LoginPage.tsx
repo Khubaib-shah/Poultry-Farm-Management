@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Moon, Sun, AlertCircle, Info } from 'lucide-react';
+import { Eye, EyeOff, Moon, Sun, AlertCircle, Info, Play } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext.tsx';
 import { api } from '../services/api.ts';
 import { AuthUser } from '../types/index.ts';
@@ -16,10 +16,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotHelp, setShowForgotHelp] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isStartingDemo, setIsStartingDemo] = useState(false);
   const { isSubmitting, run } = useThrottledSubmit({ minDisabledMs: 500, cooldownMs: 600 });
+
+  const isBusy = isSubmitting || isStartingDemo;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isStartingDemo) return;
     setErrorMessage(null);
 
     const trimmedEmail = email.trim();
@@ -38,6 +42,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       });
     } catch (err: any) {
       setErrorMessage(err?.message || 'Invalid email or password.');
+    }
+  };
+
+  const handleViewDemo = async () => {
+    if (isBusy) return;
+    setErrorMessage(null);
+    setIsStartingDemo(true);
+    try {
+      const res = await api.auth.demoLogin();
+      onLoginSuccess(res.user);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Unable to start demo mode right now.');
+    } finally {
+      setIsStartingDemo(false);
     }
   };
 
@@ -149,7 +167,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Email"
-                  disabled={isSubmitting}
+                  disabled={isBusy}
                   className="w-full h-[52px] px-4 rounded-[14px] bg-[#F3F5F6] dark:bg-[#1F2328] border border-transparent focus:border-[#17807D] dark:focus:border-[#D4F56B] focus:bg-white dark:focus:bg-[#181B1F] text-sm font-normal text-[#14161A] dark:text-[#F2F4F5] placeholder:text-[#636B76] dark:placeholder:text-[#8A929C] focus:outline-none transition disabled:opacity-60"
                 />
               </div>
@@ -167,7 +185,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Password"
-                  disabled={isSubmitting}
+                  disabled={isBusy}
                   className="w-full h-[52px] pl-4 pr-11 rounded-[14px] bg-[#F3F5F6] dark:bg-[#1F2328] border border-transparent focus:border-[#17807D] dark:focus:border-[#D4F56B] focus:bg-white dark:focus:bg-[#181B1F] text-sm font-normal text-[#14161A] dark:text-[#F2F4F5] placeholder:text-[#636B76] dark:placeholder:text-[#8A929C] focus:outline-none transition disabled:opacity-60"
                 />
                 <button
@@ -201,15 +219,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isBusy}
                 className="w-full h-[52px] mt-1 rounded-[14px] bg-[#D4F56B] hover:bg-[#C9EE55] disabled:opacity-60 disabled:cursor-not-allowed text-[#14161A] font-bold text-sm tracking-wide shadow-xs dark:shadow-none active:scale-[0.99] transition cursor-pointer"
               >
                 {isSubmitting ? 'Logging in...' : 'Login'}
               </button>
             </form>
 
+            {/* Quick Demo Divider & Action */}
+            <div className="my-5 flex items-center gap-3">
+              <div className="h-px flex-1 bg-[#E3E6E8] dark:bg-[#2A2F35]" />
+              <span className="text-xs text-[#636B76] dark:text-[#8A929C]">or</span>
+              <div className="h-px flex-1 bg-[#E3E6E8] dark:bg-[#2A2F35]" />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleViewDemo}
+              disabled={isBusy}
+              aria-busy={isStartingDemo}
+              className="w-full h-[48px] rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#1F2328] hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] disabled:opacity-60 disabled:cursor-not-allowed text-[#14161A] dark:text-[#F2F4F5] font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.99] transition cursor-pointer"
+            >
+              <Play className="w-4 h-4 text-[#17807D] dark:text-[#D4F56B]" />
+              <span>{isStartingDemo ? 'Preparing 6-Month Demo...' : 'View Demo'}</span>
+            </button>
+            <p className="mt-2 text-center text-[11px] text-[#636B76] dark:text-[#8A929C]">
+              Explore an isolated demo workspace with 6 months of sample shop data
+            </p>
+
             {/* Footer Separator */}
-            <div className="mt-7 sm:mt-8 flex items-center gap-3">
+            <div className="mt-6 flex items-center gap-3">
               <div className="h-px flex-1 bg-[#E3E6E8] dark:bg-[#2A2F35]" />
               <span className="text-xs text-[#636B76] dark:text-[#8A929C] whitespace-nowrap">
                 Al-Madina Poultry Traders

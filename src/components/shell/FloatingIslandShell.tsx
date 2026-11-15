@@ -3,11 +3,7 @@ import {
   LayoutDashboard,
   Truck,
   Users,
-  Boxes,
-  Store,
   ShoppingBag,
-  BookOpen,
-  Briefcase,
   Receipt,
   BarChart3,
   Settings,
@@ -31,14 +27,10 @@ import { AuthUser } from '../../types/index.ts';
 
 export type NavItemKey =
   | 'dashboard'
-  | 'purchases'
-  | 'suppliers'
-  | 'inventory'
-  | 'shops'
-  | 'own-shop-sales'
-  | 'dealer-ledger'
-  | 'workers'
-  | 'expenses'
+  | 'trucks-stock'
+  | 'sales'
+  | 'dealers'
+  | 'expenses-staff'
   | 'reports'
   | 'settings';
 
@@ -59,14 +51,10 @@ interface FloatingIslandShellProps {
 
 const PAGE_TITLES: Record<NavItemKey, string> = {
   dashboard: 'Overview',
-  purchases: 'Truck Purchases',
-  suppliers: 'Suppliers',
-  inventory: 'Bird Stock',
-  shops: 'Other Shops',
-  'own-shop-sales': 'Shop Sales',
-  'dealer-ledger': 'Dealer Accounts',
-  workers: 'Staff & Wages',
-  expenses: 'Daily Expenses',
+  'trucks-stock': 'Trucks & Stock',
+  sales: 'Shop Sales',
+  dealers: 'Dealers',
+  'expenses-staff': 'Expenses & Staff',
   reports: 'Profit & Loss',
   settings: 'Settings',
 };
@@ -106,17 +94,18 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const isDemoMode = currentUser?.role === 'demo' || currentUser?.workspace === 'demo';
 
   const primaryNavTabs: Array<{ key: NavItemKey; label: string; badge?: string | number }> = [
     { key: 'dashboard', label: 'OVERVIEW' },
     {
-      key: 'purchases',
-      label: 'TRUCKS',
+      key: 'trucks-stock',
+      label: 'TRUCKS & STOCK',
       badge: pendingLoadsCount > 0 ? pendingLoadsCount : undefined,
     },
-    { key: 'inventory', label: 'STOCK', badge: availableStock > 0 ? `${availableStock}` : undefined },
-    { key: 'own-shop-sales', label: 'SHOP SALES' },
-    { key: 'dealer-ledger', label: 'ACCOUNTS' },
+    { key: 'sales', label: 'SALES' },
+    { key: 'dealers', label: 'DEALERS' },
+    { key: 'expenses-staff', label: 'EXPENSES & STAFF' },
     { key: 'reports', label: 'REPORTS' },
   ];
 
@@ -126,14 +115,10 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
     icon: React.ComponentType<{ className?: string }>;
   }> = [
     { key: 'dashboard', label: 'Overview', icon: LayoutDashboard },
-    { key: 'purchases', label: 'Truck Purchases', icon: Truck },
-    { key: 'inventory', label: 'Bird Stock & Rates', icon: Boxes },
-    { key: 'own-shop-sales', label: 'Walk-in Shop Sales', icon: ShoppingBag },
-    { key: 'shops', label: 'Other Chicken Shops', icon: Store },
-    { key: 'dealer-ledger', label: 'Dealer Accounts', icon: BookOpen },
-    { key: 'suppliers', label: 'Suppliers', icon: Users },
-    { key: 'workers', label: 'Staff & Wages', icon: Briefcase },
-    { key: 'expenses', label: 'Daily Expenses', icon: Receipt },
+    { key: 'trucks-stock', label: 'Trucks & Bird Stock', icon: Truck },
+    { key: 'sales', label: 'Shop & Delivery Sales', icon: ShoppingBag },
+    { key: 'dealers', label: 'Dealers & Accounts', icon: Users },
+    { key: 'expenses-staff', label: 'Expenses & Staff', icon: Receipt },
     { key: 'reports', label: 'Profit & Loss Report', icon: BarChart3 },
     { key: 'settings', label: 'Settings', icon: Settings },
   ];
@@ -145,167 +130,177 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
       {/* TOP FADE GRADIENT MASK (Desktop xl+) */}
       <div className="hidden xl:block pointer-events-none fixed top-0 inset-x-0 h-16 bg-gradient-to-b from-[#F2F4F4] via-[#F2F4F4]/90 to-transparent dark:from-[#0F1113] dark:via-[#0F1113]/90 z-30" />
 
-      {/* 1. DESKTOP TOP-LEFT LOGO TILE */}
-      <button
-        type="button"
-        onClick={() => onSelectTab('dashboard')}
-        aria-label="Go to Overview"
-        className="hidden xl:flex fixed top-5 left-5 z-40 w-[52px] h-[52px] rounded-[18px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] items-center justify-center p-1 transition-transform hover:scale-105 cursor-pointer"
-      >
-        <img
-          src="/assets/aistudio/check-in_ceb7ef49.webp"
-          alt="Al-Madina Poultry Logo"
-          className="w-full h-full rounded-[13px] object-cover bg-[#F3F3F3]"
-        />
-      </button>
+      {/* 1-3. DESKTOP TOP FLOATING ISLAND ROW (Logo + Primary Nav + Utility Cluster) */}
+      <div className="hidden xl:flex fixed top-5 inset-x-0 px-5 z-40 items-center justify-between gap-3 pointer-events-none">
+        <div className="flex items-center gap-3 min-w-0 pointer-events-auto">
+          {/* 1. DESKTOP TOP-LEFT LOGO TILE */}
+          <button
+            type="button"
+            onClick={() => onSelectTab('dashboard')}
+            aria-label="Go to Overview"
+            className="w-[52px] h-[52px] shrink-0 rounded-[18px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center justify-center p-1 transition-transform hover:scale-105 cursor-pointer"
+          >
+            <img
+              src="/assets/aistudio/check-in_ceb7ef49.webp"
+              alt="Al-Madina Poultry Logo"
+              className="w-full h-full rounded-[13px] object-cover bg-[#F3F3F3]"
+            />
+          </button>
 
-      {/* 2. DESKTOP FLOATING NAV PILL */}
-      <nav
-        aria-label="Primary Navigation"
-        className="hidden xl:flex fixed top-5 left-[84px] z-40 h-12 rounded-full p-1 bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] items-center gap-0.5"
-      >
-        {primaryNavTabs.map((tab) => {
-          const isActive = currentTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => onSelectTab(tab.key)}
-              className={`relative px-3.5 h-10 rounded-full text-[12px] font-bold tracking-[0.07em] uppercase transition-colors duration-150 flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-                isActive
-                  ? 'text-[#14161A] dark:text-[#F2F4F5]'
-                  : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
-              }`}
+          {/* 2. DESKTOP FLOATING NAV PILL */}
+          <nav
+            aria-label="Primary Navigation"
+            className="h-12 shrink-0 rounded-full p-1 bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center gap-0.5"
+          >
+            {primaryNavTabs.map((tab) => {
+              const isActive = currentTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => onSelectTab(tab.key)}
+                  className={`relative px-2.5 2xl:px-3.5 h-[38px] rounded-full text-[11px] font-bold tracking-[0.06em] 2xl:tracking-[0.07em] uppercase transition-colors duration-150 flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                    isActive
+                      ? 'text-[#14161A] dark:text-[#F2F4F5]'
+                      : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="desktopNavPill"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] -z-10"
+                    />
+                  )}
+                  <span>{tab.label}</span>
+                  {tab.badge !== undefined && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#D4F56B] text-[#14161A] font-mono leading-none">
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* 3. DESKTOP TOP-RIGHT UTILITY CLUSTER */}
+        <div className="flex items-center gap-2 2xl:gap-2.5 shrink-0 pointer-events-auto">
+          {isDemoMode ? (
+            <div
+              data-testid="demo-mode-badge"
+              className="h-10 px-3 2xl:px-3.5 rounded-full border border-[#17807D]/30 dark:border-[#D4F56B]/30 bg-[#17807D]/10 dark:bg-[#D4F56B]/15 flex items-center gap-1.5 text-[11px] font-extrabold tracking-[0.08em] uppercase text-[#17807D] dark:text-[#D4F56B] whitespace-nowrap"
             >
-              {isActive && (
-                <motion.span
-                  layoutId="desktopNavPill"
-                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                  className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] -z-10"
-                />
-              )}
-              <span>{tab.label}</span>
-              {tab.badge !== undefined && (
-                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#D4F56B] text-[#14161A] font-mono leading-none">
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-
-        {/* More Modules Trigger */}
-        <div className="relative border-l border-[#E3E6E8] dark:border-[#2A2F35] pl-1 pr-1.5">
-          <button
-            type="button"
-            onClick={() => setMobileDrawerOpen(true)}
-            className="px-2.5 h-10 rounded-full text-[11px] font-bold tracking-[0.08em] uppercase text-[#636B76] dark:text-[#8A929C] hover:text-[#14161A] dark:hover:text-white flex items-center gap-1 cursor-pointer"
-          >
-            <span>MORE</span>
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </nav>
-
-      {/* 3. DESKTOP TOP-RIGHT UTILITY CLUSTER */}
-      <div className="hidden xl:flex fixed top-5 right-6 z-40 items-center gap-2.5">
-        <div className="h-10 px-3.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center gap-2 text-[11px] font-bold tracking-[0.08em] uppercase text-[#4A515B] dark:text-[#A3AAB3]">
-          <span>Khubaib Shah</span>
-        </div>
-
-        <PWAInstallButton variant="pill" />
-
-        <button
-          type="button"
-          onClick={() => onQuickAction('new-sale')}
-          className="h-10 px-4 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] font-bold text-xs tracking-wider uppercase flex items-center gap-1.5 transition-all duration-150 transform active:scale-95 shadow-[0_2px_8px_rgba(212,245,107,0.4)] cursor-pointer"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>QUICK SALE</span>
-        </button>
-
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-            className="h-10 px-2.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center gap-2 hover:border-[#D7DBDF] dark:hover:border-[#373E47] focus:outline-none transition cursor-pointer"
-          >
-            <div className="w-6 h-6 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5] flex items-center justify-center">
-              <User className="w-3.5 h-3.5" />
+              <span className="w-2 h-2 rounded-full bg-[#17807D] dark:bg-[#D4F56B]" />
+              <span>DEMO MODE</span>
             </div>
-            <span className="text-xs font-semibold text-[#14161A] dark:text-[#F2F4F5] max-w-[110px] truncate">
-              {businessName.split(' ')[0] || 'Al-Madina'}
-            </span>
-            <ChevronDown className="w-3 h-3 text-[#636B76]" />
+          ) : (
+            <div className="hidden 2xl:flex h-10 px-3.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] items-center gap-2 text-[11px] font-bold tracking-[0.08em] uppercase text-[#4A515B] dark:text-[#A3AAB3] whitespace-nowrap">
+              <span>Khubaib Shah</span>
+            </div>
+          )}
+
+          <PWAInstallButton variant="pill" />
+
+          <button
+            type="button"
+            onClick={() => onQuickAction('new-sale')}
+            className="h-10 px-3.5 2xl:px-4 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] font-bold text-xs tracking-wider uppercase flex items-center gap-1.5 transition-all duration-150 transform active:scale-95 shadow-[0_2px_8px_rgba(212,245,107,0.4)] whitespace-nowrap cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>QUICK SALE</span>
           </button>
 
-          <AnimatePresence>
-            {profileDropdownOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                transition={{ duration: 0.14 }}
-                className="absolute right-0 top-12 w-56 p-2 rounded-[18px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-xl z-50"
-              >
-                <div className="p-2 border-b border-[#E3E6E8] dark:border-[#2A2F35]">
-                  <div className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] truncate">
-                    {currentUser?.name || businessName}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+              className="h-10 px-2.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center gap-2 hover:border-[#D7DBDF] dark:hover:border-[#373E47] focus:outline-none transition whitespace-nowrap cursor-pointer"
+            >
+              <div className="w-6 h-6 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5] flex items-center justify-center">
+                <User className="w-3.5 h-3.5" />
+              </div>
+              <span className="text-xs font-semibold text-[#14161A] dark:text-[#F2F4F5] max-w-[110px] truncate">
+                {businessName.split(' ')[0] || 'Al-Madina'}
+              </span>
+              <ChevronDown className="w-3 h-3 text-[#636B76]" />
+            </button>
+
+            <AnimatePresence>
+              {profileDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                  transition={{ duration: 0.14 }}
+                  className="absolute right-0 top-12 w-56 p-2 rounded-[18px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-xl z-50"
+                >
+                  <div className="p-2 border-b border-[#E3E6E8] dark:border-[#2A2F35]">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] truncate">
+                        {currentUser?.name || businessName}
+                      </div>
+                      {isDemoMode && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-[#17807D]/15 text-[#17807D] dark:bg-[#D4F56B]/20 dark:text-[#D4F56B]">
+                          Demo
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-[#636B76] dark:text-[#8A929C] truncate">
+                      {currentUser?.email || 'Farm & Shop Manager'}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-[#636B76] dark:text-[#8A929C] truncate">
-                    {currentUser?.email || 'Farm & Shop Manager'}
-                  </div>
-                </div>
-                <div className="py-1 space-y-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectTab('settings');
-                      setProfileDropdownOpen(false);
-                    }}
-                    className="w-full text-left px-2.5 py-2 text-xs rounded-lg hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] font-medium transition cursor-pointer"
-                  >
-                    Shop Settings
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectTab('dealer-ledger');
-                      setProfileDropdownOpen(false);
-                    }}
-                    className="w-full text-left px-2.5 py-2 text-xs rounded-lg hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] font-medium transition cursor-pointer"
-                  >
-                    Dealer Accounts
-                  </button>
-                  <PWAInstallButton
-                    variant="menu-item"
-                    onActionComplete={() => setProfileDropdownOpen(false)}
-                  />
-                </div>
-                {onLogout && (
-                  <div className="pt-1 mt-1 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
+                  <div className="py-1 space-y-0.5">
                     <button
                       type="button"
                       onClick={() => {
+                        onSelectTab('settings');
                         setProfileDropdownOpen(false);
-                        onLogout();
                       }}
-                      className="w-full flex items-center gap-2 text-left px-2.5 py-2 text-xs rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold transition cursor-pointer"
+                      className="w-full text-left px-2.5 py-2 text-xs rounded-lg hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] font-medium transition cursor-pointer"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Sign Out</span>
+                      Shop Settings
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectTab('dealers');
+                        setProfileDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-2.5 py-2 text-xs rounded-lg hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] font-medium transition cursor-pointer"
+                    >
+                      Dealers & Accounts
+                    </button>
+                    <PWAInstallButton
+                      variant="menu-item"
+                      onActionComplete={() => setProfileDropdownOpen(false)}
+                    />
                   </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  {onLogout && (
+                    <div className="pt-1 mt-1 border-t border-[#E3E6E8] dark:border-[#2A2F35]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileDropdownOpen(false);
+                          onLogout();
+                        }}
+                        className="w-full flex items-center gap-2 text-left px-2.5 py-2 text-xs rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold transition cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 
       {/* 4. DESKTOP FLOATING VERTICAL LEFT RAIL */}
       <div className="hidden xl:flex fixed top-28 left-5 z-40 flex-col items-center w-[52px] p-1.5 gap-1.5 bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)]">
-        {allModules.slice(0, 8).map((item) => {
+        {allModules.slice(0, 6).map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.key;
           return (
@@ -332,11 +327,18 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
 
         <button
           type="button"
-          onClick={() => setMobileDrawerOpen(true)}
-          title="All Sections"
-          className="w-10 h-10 rounded-[14px] flex items-center justify-center text-[#4A515B] dark:text-[#A3AAB3] hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] hover:text-[#14161A] dark:hover:text-white transition cursor-pointer"
+          onClick={() => onSelectTab('settings')}
+          title="Settings"
+          className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition cursor-pointer group relative ${
+            currentTab === 'settings'
+              ? 'bg-[#D4F56B] text-[#14161A] shadow-xs'
+              : 'text-[#4A515B] dark:text-[#A3AAB3] hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] hover:text-[#14161A] dark:hover:text-white'
+          }`}
         >
-          <Menu className="w-4 h-4" />
+          <Settings className="w-4 h-4" />
+          <span className="opacity-0 group-hover:opacity-100 transition absolute left-14 z-50 bg-[#14161A] text-white text-[11px] font-medium px-2.5 py-1 rounded-lg whitespace-nowrap shadow-md pointer-events-none">
+            Settings
+          </span>
         </button>
       </div>
 
@@ -406,8 +408,15 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
         {/* Second Row: Current Page Title + Date left, Quick Square Icon Buttons right */}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[24px] sm:text-[26px] leading-tight font-extrabold tracking-[-0.02em] text-[#14161A] dark:text-[#F2F4F5] truncate">
-              {PAGE_TITLES[currentTab]}
+            <div className="flex items-center gap-2">
+              <div className="text-[24px] sm:text-[26px] leading-tight font-extrabold tracking-[-0.02em] text-[#14161A] dark:text-[#F2F4F5] truncate">
+                {PAGE_TITLES[currentTab]}
+              </div>
+              {isDemoMode && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-[#17807D]/15 text-[#17807D] dark:bg-[#D4F56B]/20 dark:text-[#D4F56B] shrink-0">
+                  Demo
+                </span>
+              )}
             </div>
             <div className="text-xs font-medium text-[#636B76] dark:text-[#8A929C] mt-0.5">
               {todayFormatted} · {availableStock.toLocaleString('en-PK')} birds in stock
@@ -425,7 +434,7 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onSelectTab('purchases')}
+              onClick={() => onSelectTab('trucks-stock')}
               aria-label="Check Truck Arrivals"
               className="relative w-10 h-10 rounded-[14px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-xs flex items-center justify-center text-[#14161A] dark:text-white active:scale-95 transition cursor-pointer"
             >
@@ -466,14 +475,14 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
           />
         </button>
 
-        {/* Tab 2: Truck Purchases (with electric-lime count badge) */}
+        {/* Tab 2: Trucks & Stock (with electric-lime count badge) */}
         <button
           type="button"
-          onClick={() => onSelectTab('purchases')}
-          aria-label="Truck Purchases"
+          onClick={() => onSelectTab('trucks-stock')}
+          aria-label="Trucks & Stock"
           className="relative w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
         >
-          {currentTab === 'purchases' && (
+          {currentTab === 'trucks-stock' && (
             <motion.span
               layoutId="mobileNavActive"
               transition={{ type: 'spring', stiffness: 420, damping: 30 }}
@@ -482,7 +491,7 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
           )}
           <Truck
             className={`relative z-10 w-5 h-5 transition-colors ${
-              currentTab === 'purchases'
+              currentTab === 'trucks-stock'
                 ? 'text-[#14161A] dark:text-[#F2F4F5] stroke-[2.2]'
                 : 'text-[#636B76] dark:text-[#8A929C]'
             }`}
@@ -507,11 +516,11 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
         {/* Tab 4: Shop Sales */}
         <button
           type="button"
-          onClick={() => onSelectTab('own-shop-sales')}
+          onClick={() => onSelectTab('sales')}
           aria-label="Shop Sales"
           className="relative w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
         >
-          {currentTab === 'own-shop-sales' && (
+          {currentTab === 'sales' && (
             <motion.span
               layoutId="mobileNavActive"
               transition={{ type: 'spring', stiffness: 420, damping: 30 }}
@@ -520,7 +529,7 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
           )}
           <ShoppingBag
             className={`relative z-10 w-5 h-5 transition-colors ${
-              currentTab === 'own-shop-sales'
+              currentTab === 'sales'
                 ? 'text-[#14161A] dark:text-[#F2F4F5] stroke-[2.2]'
                 : 'text-[#636B76] dark:text-[#8A929C]'
             }`}
@@ -621,7 +630,7 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                         <Icon className="w-4 h-4" />
                         <span>{item.label}</span>
                       </span>
-                      {item.key === 'purchases' && pendingLoadsCount > 0 && (
+                      {item.key === 'trucks-stock' && pendingLoadsCount > 0 && (
                         <span className="px-2 py-0.5 rounded-full bg-[#D4F56B] text-[#14161A] text-[10px] font-bold">
                           {pendingLoadsCount}
                         </span>

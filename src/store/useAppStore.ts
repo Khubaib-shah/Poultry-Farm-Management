@@ -25,6 +25,7 @@ import {
 import { ToastMessage } from '../components/common/Toast.tsx';
 import { createStoreMutationGuard } from '../utils/submitThrottle.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
+import { pageResponseCache } from '../utils/paginationCache.ts';
 
 export interface OptimisticMutationOptions<T = void> {
   onOptimistic?: (optimisticValue: T) => void;
@@ -64,6 +65,8 @@ interface AppStore extends CoreDataState {
   toasts: ToastMessage[];
   columnPrefs: Record<string, string[]>;
   resolvedIdMap: Record<number, number>;
+  workspace: 'real' | 'demo';
+  dataCacheVersion: number;
 
   // Toast & Error helpers
   addToast: (text: string, type?: 'success' | 'error' | 'info') => void;
@@ -71,11 +74,14 @@ interface AppStore extends CoreDataState {
   setGlobalError: (msg: string | null) => void;
   clearGlobalError: () => void;
   setColumnPrefs: (tableId: string, cols: string[]) => void;
+  setWorkspace: (workspace: 'real' | 'demo') => void;
+  invalidateDataCache: () => void;
 
   // Hydration & Sync
   bootstrap: (options?: { force?: boolean; silent?: boolean }) => Promise<void>;
   refreshInBackground: () => Promise<void>;
   seedDemoData: (force?: boolean) => Promise<void>;
+  resetWorkspaceData: () => Promise<{ mode: 'real' | 'demo'; message: string }>;
   resetStore: () => void;
 
   // Optimistic Mutations with Instant UI/Modal Callback + Background DB Sync + Rollback
@@ -309,6 +315,8 @@ export const useAppStore = create<AppStore>((set, get) => {
     toasts: [],
     columnPrefs: loadStoredColumnPrefs(),
     resolvedIdMap: {},
+    workspace: 'real',
+    dataCacheVersion: 0,
 
     addToast: (text, type = 'success') => {
       pushToast(text, type);
@@ -331,10 +339,26 @@ export const useAppStore = create<AppStore>((set, get) => {
       set({ columnPrefs: next });
     },
 
+    setWorkspace: (workspace) => {
+      if (get().workspace !== workspace) {
+        pageResponseCache.clear();
+        set((s) => ({
+          workspace,
+          dataCacheVersion: s.dataCacheVersion + 1,
+        }));
+      }
+    },
+
+    invalidateDataCache: () => {
+      pageResponseCache.clear();
+      set((s) => ({ dataCacheVersion: s.dataCacheVersion + 1 }));
+    },
+
     resetStore: () => {
       activeBootstrapPromise = null;
       pendingIdResolvers.clear();
-      set({
+      pageResponseCache.clear();
+      set((s) => ({
         suppliers: [],
         purchases: [],
         batches: [],
@@ -353,7 +377,8 @@ export const useAppStore = create<AppStore>((set, get) => {
         lastSyncedAt: null,
         globalError: null,
         resolvedIdMap: {},
-      });
+        dataCacheVersion: s.dataCacheVersion + 1,
+      }));
     },
 
     bootstrap: async (options) => {
@@ -443,10 +468,32 @@ export const useAppStore = create<AppStore>((set, get) => {
         set((s) => ({ syncingCount: s.syncingCount + 1, globalError: null }));
         try {
           const res = await api.seedData(force);
+          get().invalidateDataCache();
           await get().bootstrap({ force: true, silent: true });
           pushToast(res.message || 'Demo data synced', 'success');
         } catch (err: any) {
           const msg = err?.message || 'Failed to load demo data';
+          set({ globalError: msg });
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    resetWorkspaceData: () =>
+      mutationGuard.run('resetWorkspaceData', {}, async () => {
+        set((s) => ({ syncingCount: s.syncingCount + 1, globalError: null }));
+        try {
+          const res = await api.resetWorkspace();
+          pendingIdResolvers.clear();
+          set({ resolvedIdMap: {} });
+          get().invalidateDataCache();
+          await get().bootstrap({ force: true, silent: true });
+          pushToast(res.message || 'Data reset completed', 'success');
+          return { mode: res.mode, message: res.message };
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to reset data';
           set({ globalError: msg });
           pushToast(msg, 'error');
           throw err;
@@ -548,6 +595,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             }));
             options?.onSynced?.(mergedLoad);
             void get().refreshInBackground();
+          get().invalidateDataCache();
             return mergedLoad;
           } catch (err: any) {
             const msg = err?.message || 'Failed to save purchase load. Reverted changes.';
@@ -561,6 +609,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 globalError: msg,
               }));
               void get().refreshInBackground();
+          get().invalidateDataCache();
             }
             options?.onRollback?.(err);
             pushToast(msg, 'error');
@@ -655,6 +704,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             }));
             options?.onSynced?.();
             void get().refreshInBackground();
+          get().invalidateDataCache();
             return created.id;
           } catch (err: any) {
             const msg = err?.message || 'Failed to add truck expense. Reverted.';
@@ -663,6 +713,7 @@ export const useAppStore = create<AppStore>((set, get) => {
               set({ ...snapshot, globalError: msg });
             } else {
               void get().refreshInBackground();
+          get().invalidateDataCache();
               set({ globalError: msg });
             }
             options?.onRollback?.(err);
@@ -735,6 +786,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           await api.deleteLoadExpense(realLoadId, realExpenseId);
           options?.onSynced?.();
           void get().refreshInBackground();
+          get().invalidateDataCache();
         } catch (err: any) {
           const msg = err?.message || 'Failed to remove truck expense. Reverted.';
           get().dismissToast(toastId);
@@ -742,6 +794,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             set({ ...snapshot, globalError: msg });
           } else {
             void get().refreshInBackground();
+          get().invalidateDataCache();
             set({ globalError: msg });
           }
           options?.onRollback?.(err);
@@ -850,6 +903,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             }));
             options?.onSynced?.(mergedBatch);
             void get().refreshInBackground();
+          get().invalidateDataCache();
             return mergedBatch;
           } catch (err: any) {
             const msg = err?.message || 'Could not receive stock. Reverted.';
@@ -866,6 +920,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 globalError: msg,
               }));
               void get().refreshInBackground();
+          get().invalidateDataCache();
             }
             options?.onRollback?.(err);
             pushToast(msg, 'error');
@@ -938,6 +993,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           await api.adjustStock({ ...data, stockBatchId: realBatchId });
           options?.onSynced?.();
           void get().refreshInBackground();
+          get().invalidateDataCache();
         } catch (err: any) {
           const msg = err?.message || 'Failed to update stock count. Reverted.';
           get().dismissToast(toastId);
@@ -945,6 +1001,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             set({ ...snapshot, globalError: msg });
           } else {
             void get().refreshInBackground();
+          get().invalidateDataCache();
             set({ globalError: msg });
           }
           options?.onRollback?.(err);
@@ -1059,6 +1116,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           }
           options?.onSynced?.(res);
           void get().refreshInBackground();
+          get().invalidateDataCache();
           return res;
         } catch (err: any) {
           const msg = err?.message || 'Could not save sale. Stock restored.';
@@ -1073,6 +1131,7 @@ export const useAppStore = create<AppStore>((set, get) => {
               globalError: msg,
             }));
             void get().refreshInBackground();
+          get().invalidateDataCache();
           }
           options?.onRollback?.(err);
           pushToast(msg, 'error');
@@ -1201,6 +1260,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           }
           options?.onSynced?.(res);
           void get().refreshInBackground();
+          get().invalidateDataCache();
           return res;
         } catch (err: any) {
           const msg = err?.message || 'Could not save delivery. Reverted.';
@@ -1215,6 +1275,7 @@ export const useAppStore = create<AppStore>((set, get) => {
               globalError: msg,
             }));
             void get().refreshInBackground();
+          get().invalidateDataCache();
           }
           options?.onRollback?.(err);
           pushToast(msg, 'error');
@@ -1294,6 +1355,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             }));
             options?.onSynced?.(mergedSup);
             void get().refreshInBackground();
+          get().invalidateDataCache();
             return mergedSup;
           } catch (err: any) {
             const msg = err?.message || 'Failed to add supplier. Reverted.';
@@ -1307,6 +1369,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 globalError: msg,
               }));
               void get().refreshInBackground();
+          get().invalidateDataCache();
             }
             options?.onRollback?.(err);
             pushToast(msg, 'error');
@@ -1383,6 +1446,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           }));
           options?.onSynced?.();
           void get().refreshInBackground();
+          get().invalidateDataCache();
         } catch (err: any) {
           const msg = err?.message || 'Failed to save payment. Reverted.';
           get().dismissToast(toastId);
@@ -1394,6 +1458,7 @@ export const useAppStore = create<AppStore>((set, get) => {
               globalError: msg,
             }));
             void get().refreshInBackground();
+          get().invalidateDataCache();
           }
           options?.onRollback?.(err);
           pushToast(msg, 'error');
@@ -1447,6 +1512,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             }));
             options?.onSynced?.(mergedShop);
             void get().refreshInBackground();
+          get().invalidateDataCache();
             return mergedShop;
           } catch (err: any) {
             const msg = err?.message || 'Failed to add shop. Reverted.';
@@ -1459,6 +1525,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 globalError: msg,
               }));
               void get().refreshInBackground();
+          get().invalidateDataCache();
             }
             options?.onRollback?.(err);
             pushToast(msg, 'error');
@@ -1517,6 +1584,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             }));
             options?.onSynced?.(mergedWorker);
             void get().refreshInBackground();
+          get().invalidateDataCache();
             return mergedWorker;
           } catch (err: any) {
             const msg = err?.message || 'Failed to add worker. Reverted.';
@@ -1529,6 +1597,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 globalError: msg,
               }));
               void get().refreshInBackground();
+          get().invalidateDataCache();
             }
             options?.onRollback?.(err);
             pushToast(msg, 'error');
@@ -1601,6 +1670,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           }));
           options?.onSynced?.();
           void get().refreshInBackground();
+          get().invalidateDataCache();
         } catch (err: any) {
           const msg = err?.message || 'Failed to save worker payment. Reverted.';
           get().dismissToast(toastId);
@@ -1612,6 +1682,7 @@ export const useAppStore = create<AppStore>((set, get) => {
               globalError: msg,
             }));
             void get().refreshInBackground();
+          get().invalidateDataCache();
           }
           options?.onRollback?.(err);
           pushToast(msg, 'error');
@@ -1659,6 +1730,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             }));
             options?.onSynced?.(mergedExp);
             void get().refreshInBackground();
+          get().invalidateDataCache();
             return mergedExp;
           } catch (err: any) {
             const msg = err?.message || 'Failed to save expense. Reverted.';
@@ -1671,6 +1743,7 @@ export const useAppStore = create<AppStore>((set, get) => {
                 globalError: msg,
               }));
               void get().refreshInBackground();
+          get().invalidateDataCache();
             }
             options?.onRollback?.(err);
             pushToast(msg, 'error');
@@ -1709,6 +1782,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           await api.deleteExpense(realId);
           options?.onSynced?.();
           void get().refreshInBackground();
+          get().invalidateDataCache();
         } catch (err: any) {
           const msg = err?.message || 'Failed to delete expense. Reverted.';
           get().dismissToast(toastId);
@@ -1716,6 +1790,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             set({ ...snapshot, globalError: msg });
           } else {
             void get().refreshInBackground();
+          get().invalidateDataCache();
             set({ globalError: msg });
           }
           options?.onRollback?.(err);
@@ -1745,6 +1820,7 @@ export const useAppStore = create<AppStore>((set, get) => {
           await api.updateSettings(data);
           options?.onSynced?.();
           void get().refreshInBackground();
+          get().invalidateDataCache();
         } catch (err: any) {
           const msg = err?.message || 'Failed to save settings. Reverted.';
           get().dismissToast(toastId);
@@ -1752,6 +1828,7 @@ export const useAppStore = create<AppStore>((set, get) => {
             set({ ...snapshot, globalError: msg });
           } else {
             void get().refreshInBackground();
+          get().invalidateDataCache();
             set({ globalError: msg });
           }
           options?.onRollback?.(err);

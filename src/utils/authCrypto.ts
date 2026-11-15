@@ -1,15 +1,29 @@
 import crypto from 'node:crypto';
 
+export type WorkspaceMode = 'real' | 'demo';
+
 export interface SessionUser {
   id: number;
   uid: string;
   email: string;
   name: string;
   role: string;
+  workspace?: WorkspaceMode;
 }
 
 export interface SessionPayload extends SessionUser {
+  workspace: WorkspaceMode;
   exp: number;
+}
+
+export function resolveUserWorkspace(user: {
+  role?: string | null;
+  workspace?: string | null;
+}): WorkspaceMode {
+  if (user.workspace === 'demo' || user.role === 'demo') {
+    return 'demo';
+  }
+  return 'real';
 }
 
 const SCRYPT_KEYLEN = 64;
@@ -77,6 +91,7 @@ export function signSessionToken(
     email: user.email,
     name: user.name,
     role: user.role,
+    workspace: resolveUserWorkspace(user),
     exp: nowSeconds + ttlSeconds,
   };
   const body = toBase64Url(JSON.stringify(payload));
@@ -134,6 +149,7 @@ export function verifySessionToken(
       email: decoded.email,
       name: typeof decoded.name === 'string' ? decoded.name : 'Owner',
       role: decoded.role,
+      workspace: resolveUserWorkspace(decoded),
       exp: decoded.exp,
     };
   } catch {

@@ -10,7 +10,10 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Select, SelectOption } from './Select.tsx';
+import { Pagination } from './Pagination.tsx';
 import { useAppStore } from '../../store/useAppStore.ts';
+import { usePaginatedQuery } from '../../hooks/usePaginatedQuery.ts';
+import { DEFAULT_PAGE_SIZE } from '../../utils/paginationCache.ts';
 
 export interface DataTableColumn<T> {
   key: string;
@@ -55,6 +58,10 @@ interface DataTableProps<T> {
   headerActions?: React.ReactNode;
   title?: string;
   subtitle?: string;
+  paginationEndpoint?: string;
+  paginationParams?: Record<string, string | number | boolean | null | undefined>;
+  defaultPageSize?: number;
+  showPagination?: boolean;
 }
 
 export function DataTable<T>({
@@ -78,16 +85,31 @@ export function DataTable<T>({
   headerActions,
   title,
   subtitle,
+  paginationEndpoint,
+  paginationParams,
+  defaultPageSize = DEFAULT_PAGE_SIZE,
+  showPagination = true,
 }: DataTableProps<T>) {
   const { columnPrefs, setColumnPrefs } = useAppStore();
   const [internalSearch, setInternalSearch] = useState('');
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey || null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(defaultSortDir);
   const [colPickerOpen, setColPickerOpen] = useState(false);
+  const [localPageSize, setLocalPageSize] = useState(defaultPageSize);
+  const [localPage, setLocalPage] = useState(1);
   const pickerRef = useRef<HTMLDivElement>(null);
 
   const query = searchValue !== undefined ? searchValue : internalSearch;
   const setQuery = onSearchChange || setInternalSearch;
+
+  const serverQuery = usePaginatedQuery<T>({
+    endpoint: paginationEndpoint,
+    params: paginationParams,
+    search: query,
+    sortKey,
+    sortDir,
+    defaultPageSize,
+  });
 
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
@@ -136,19 +158,20 @@ export function DataTable<T>({
     [columns, visibleColumnKeys]
   );
 
-  // Local search fallback if consumer didn't supply onSearchChange
+  // Local search fallback if consumer didn't supply onSearchChange and table is local
   const searchedData = useMemo(() => {
-    if (onSearchChange || !query.trim()) return data;
+    if (serverQuery.enabled || onSearchChange || !query.trim()) return data;
     const q = query.toLowerCase();
     return data.filter((row) =>
       Object.values(row as Record<string, unknown>).some((val) =>
         String(val ?? '').toLowerCase().includes(q)
       )
     );
-  }, [data, query, onSearchChange]);
+  }, [serverQuery.enabled, data, query, onSearchChange]);
 
-  // Sorting
+  // Local Sorting fallback when not server-paginated
   const sortedData = useMemo(() => {
+    if (serverQuery.enabled) return searchedData;
     if (!sortKey) return searchedData;
     const col = columns.find((c) => c.key === sortKey);
     if (!col) return searchedData;
@@ -170,7 +193,57 @@ export function DataTable<T>({
       if (strA > strB) return sortDir === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [searchedData, sortKey, sortDir, columns]);
+  }, [serverQuery.enabled, searchedData, sortKey, sortDir, columns]);
+
+  // Reset client-side page when local dataset / filter / sort changes
+  const localFilterKey = `${query}::${sortKey || ''}::${sortDir}::${sortedData.length}`;
+  const prevLocalFilterRef = useRef(localFilterKey);
+  useEffect(() => {
+    if (prevLocalFilterRef.current !== localFilterKey) {
+      prevLocalFilterRef.current = localFilterKey;
+      setLocalPage(1);
+    }
+  }, [localFilterKey]);
+
+  const effectiveLimit = serverQuery.enabled ? serverQuery.limit : localPageSize;
+  const effectiveSkip = serverQuery.enabled
+    ? serverQuery.skip
+    : (Math.max(1, localPage) - 1) * localPageSize;
+  const effectiveTotal = serverQuery.enabled ? serverQuery.total : sortedData.length;
+
+  const displayedRows = useMemo(() => {
+    if (serverQuery.enabled) {
+      return serverQuery.items;
+    }
+    if (!showPagination) {
+      return sortedData;
+    }
+    return sortedData.slice(effectiveSkip, effectiveSkip + effectiveLimit);
+  }, [serverQuery.enabled, serverQuery.items, showPagination, sortedData, effectiveSkip, effectiveLimit]);
+
+  const effectiveLoading = serverQuery.enabled
+    ? (loading || serverQuery.isInitialLoading) && displayedRows.length === 0
+    : loading && displayedRows.length === 0;
+
+  const isUpdatingStale = serverQuery.enabled && serverQuery.isFetching && displayedRows.length > 0;
+  const hasPaginationBar = showPagination && (effectiveTotal > 0 || serverQuery.isFetching);
+
+  const handlePageChange = (nextPage: number) => {
+    if (serverQuery.enabled) {
+      serverQuery.setPageIndex(nextPage);
+    } else {
+      setLocalPage(Math.max(1, nextPage));
+    }
+  };
+
+  const handlePageSizeChange = (nextSize: number) => {
+    if (serverQuery.enabled) {
+      serverQuery.setPageSize(nextSize);
+    } else {
+      setLocalPageSize(nextSize);
+      setLocalPage(1);
+    }
+  };
 
   const handleSort = (col: DataTableColumn<T>) => {
     if (!col.sortable) return;
@@ -316,7 +389,7 @@ export function DataTable<T>({
       </div>
 
       {/* DESKTOP / TABLET TABLE VIEW (md+) */}
-      <div className="hidden md:block overflow-x-auto rounded-b-[20px]">
+      <div className={`hidden md:block overflow-x-auto ${hasPaginationBar ? '' : 'rounded-b-[20px]'}`}>
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] text-[#7B848F] dark:text-[#8A929C] font-medium uppercase tracking-wider text-[11px]">
@@ -360,8 +433,12 @@ export function DataTable<T>({
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] font-normal text-[#636B76] dark:text-[#A3AAB3] tabular-nums">
-            {loading && sortedData.length === 0 ? (
+          <tbody
+            className={`divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] font-normal text-[#636B76] dark:text-[#A3AAB3] tabular-nums transition-opacity duration-150 ${
+              isUpdatingStale ? 'opacity-65' : 'opacity-100'
+            }`}
+          >
+            {effectiveLoading ? (
               Array.from({ length: 3 }).map((_, idx) => (
                 <tr key={`skeleton-row-${idx}`} className="animate-pulse">
                   {visibleColumns.map((col) => (
@@ -371,17 +448,17 @@ export function DataTable<T>({
                   ))}
                 </tr>
               ))
-            ) : sortedData.length === 0 ? (
+            ) : displayedRows.length === 0 ? (
               <tr>
                 <td
                   colSpan={visibleColumns.length}
                   className="py-10 text-center text-[#636B76] dark:text-[#8A929C]"
                 >
-                  {emptyMessage}
+                  {serverQuery.error || emptyMessage}
                 </td>
               </tr>
             ) : (
-              sortedData.map((row) => (
+              displayedRows.map((row) => (
                 <tr
                   key={keyExtractor(row)}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
@@ -413,9 +490,9 @@ export function DataTable<T>({
       </div>
 
       {/* MOBILE CLEAN LIST CARDS VIEW (< md) */}
-      <div className="md:hidden rounded-b-[20px]">
+      <div className={`md:hidden ${hasPaginationBar ? '' : 'rounded-b-[20px]'}`}>
         {/* Mobile Compact Sort Bar */}
-        {columns.some((c) => c.sortable) && sortedData.length > 0 && (
+        {columns.some((c) => c.sortable) && displayedRows.length > 0 && (
           <div className="px-4 py-2.5 bg-[#F8F9FA] dark:bg-[#20242A] border-b border-[#E3E6E8] dark:border-[#2A2F35] flex items-center gap-2">
             <span className="text-[11px] font-semibold text-[#636B76] dark:text-[#8A929C] shrink-0">
               Sort:
@@ -458,8 +535,12 @@ export function DataTable<T>({
           </div>
         )}
 
-        <div className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35]">
-          {loading && sortedData.length === 0 ? (
+        <div
+          className={`divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] transition-opacity duration-150 ${
+            isUpdatingStale ? 'opacity-65' : 'opacity-100'
+          }`}
+        >
+          {effectiveLoading ? (
             Array.from({ length: 3 }).map((_, idx) => (
               <div key={`mobile-skel-${idx}`} className="p-4 space-y-2.5 animate-pulse">
                 <div className="flex justify-between items-center">
@@ -469,12 +550,12 @@ export function DataTable<T>({
                 <div className="h-12 w-full rounded-[12px] bg-[#F8F9FA] dark:bg-[#20242A]" />
               </div>
             ))
-          ) : sortedData.length === 0 ? (
+          ) : displayedRows.length === 0 ? (
             <div className="py-10 px-4 text-center text-xs text-[#636B76] dark:text-[#8A929C]">
-              {emptyMessage}
+              {serverQuery.error || emptyMessage}
             </div>
           ) : (
-            sortedData.map((row) => {
+            displayedRows.map((row) => {
               const detailColumns = visibleColumns.filter(
                 (c) => !c.hideOnMobileDefault && c.key !== 'actions'
               );
@@ -532,6 +613,19 @@ export function DataTable<T>({
           )}
         </div>
       </div>
+
+      {/* SINGLE REUSABLE PAGINATION FOOTER */}
+      {hasPaginationBar && (
+        <Pagination
+          total={effectiveTotal}
+          limit={effectiveLimit}
+          skip={effectiveSkip}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          isFetching={serverQuery.enabled ? serverQuery.isFetching : false}
+          isStale={serverQuery.enabled ? serverQuery.isStaleData : false}
+        />
+      )}
     </div>
   );
 }

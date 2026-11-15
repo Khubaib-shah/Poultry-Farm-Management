@@ -14,6 +14,10 @@ import {
   BootstrapData,
   AuthUser,
 } from '../types/index.ts';
+import {
+  PaginatedResponse,
+  buildPaginationQueryString,
+} from '../utils/paginationCache.ts';
 
 const AUTH_TOKEN_KEY = 'checkin_auth_token';
 
@@ -56,7 +60,12 @@ async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> 
     headers,
   });
 
-  if (response.status === 401 && url !== '/api/auth/login' && url !== '/api/auth/me') {
+  if (
+    response.status === 401 &&
+    url !== '/api/auth/login' &&
+    url !== '/api/auth/demo' &&
+    url !== '/api/auth/me'
+  ) {
     setStoredAuthToken(null);
     unauthorizedHandler?.();
   }
@@ -97,6 +106,16 @@ export const api = {
       }
       return data;
     },
+    demoLogin: async () => {
+      const res = await apiFetch('/api/auth/demo', {
+        method: 'POST',
+      });
+      const data = await handleResponse<{ user: AuthUser; token: string }>(res);
+      if (data.token) {
+        setStoredAuthToken(data.token);
+      }
+      return data;
+    },
     logout: async () => {
       try {
         await apiFetch('/api/auth/logout', { method: 'POST' });
@@ -108,6 +127,16 @@ export const api = {
 
   // Unified Bootstrap
   getBootstrap: () => apiFetch('/api/bootstrap').then((r) => handleResponse<BootstrapData>(r)),
+
+  // Server-paginated list fetcher (limit/skip + filters + sort)
+  getPaginated: <T>(
+    endpoint: string,
+    params: Record<string, string | number | boolean | null | undefined>
+  ): Promise<PaginatedResponse<T>> => {
+    const qs = buildPaginationQueryString(params);
+    const url = qs ? `${endpoint}?${qs}` : endpoint;
+    return apiFetch(url).then((r) => handleResponse<PaginatedResponse<T>>(r));
+  },
 
   // Settings
   updateSettings: (data: Partial<AppSettings>) =>
@@ -276,4 +305,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ force }),
     }).then((r) => handleResponse<{ message: string; seeded?: boolean }>(r)),
+
+  // Mode-aware workspace reset (real clears all real records; demo resets to fresh 6-month data)
+  resetWorkspace: () =>
+    apiFetch('/api/reset', {
+      method: 'POST',
+    }).then((r) =>
+      handleResponse<{ success: boolean; mode: 'real' | 'demo'; message: string }>(r)
+    ),
 };

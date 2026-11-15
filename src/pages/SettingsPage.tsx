@@ -1,24 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import {
   Save,
-  Database,
   RefreshCw,
+  Trash2,
+  ShieldAlert,
 } from 'lucide-react';
-import { AppSettings } from '../types/index.ts';
+import { AppSettings, AuthUser } from '../types/index.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 import { PWAInstallButton } from '../components/common/PWAInstallButton.tsx';
 
-export const SettingsPage: React.FC = () => {
+interface SettingsPageProps {
+  currentUser?: AuthUser | null;
+}
+
+export const SettingsPage: React.FC<SettingsPageProps> = ({ currentUser }) => {
   const storeSettings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
-  const seedDemoData = useAppStore((s) => s.seedDemoData);
+  const resetWorkspaceData = useAppStore((s) => s.resetWorkspaceData);
+
+  const isDemoMode = currentUser?.role === 'demo' || currentUser?.workspace === 'demo';
 
   const [formState, setFormState] = useState<AppSettings>(storeSettings);
   const [confirmReset, setConfirmReset] = useState(false);
 
   const { isSubmitting: isSavingSettings, runOptimistic: runSaveSettings } = useThrottledSubmit();
-  const { isSubmitting: seeding, run: runSeed } = useThrottledSubmit();
+  const { isSubmitting: resetting, run: runReset } = useThrottledSubmit();
 
   useEffect(() => {
     setFormState(storeSettings);
@@ -33,15 +40,15 @@ export const SettingsPage: React.FC = () => {
     );
   };
 
-  const handleSeed = async (force: boolean) => {
-    if (force && !confirmReset) {
+  const handleWorkspaceReset = async () => {
+    if (!confirmReset) {
       setConfirmReset(true);
       return;
     }
     setConfirmReset(false);
-    await runSeed(async () => {
+    await runReset(async () => {
       try {
-        await seedDemoData(force);
+        await resetWorkspaceData();
       } catch {
         // handled by store
       }
@@ -58,7 +65,9 @@ export const SettingsPage: React.FC = () => {
           Shop Settings
         </h2>
         <p className="text-xs text-[#4A515B] dark:text-[#A3AAB3] mt-0.5">
-          Update shop name, low stock warning level, and sample test data
+          {isDemoMode
+            ? 'Configure demo shop details, quick price checks, and reset your demo sandbox'
+            : 'Update shop details, low-stock threshold, rate benchmarks, and account data'}
         </p>
       </div>
 
@@ -134,6 +143,9 @@ export const SettingsPage: React.FC = () => {
                 />
               </div>
             </div>
+            <p className="text-[11px] text-[#636B76] dark:text-[#8A929C]">
+              Saved benchmark rates used in Trucks &amp; Bird Stock → Rate &amp; Profit Checker cards.
+            </p>
 
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
@@ -171,41 +183,73 @@ export const SettingsPage: React.FC = () => {
       {/* Install App / Add to Home Screen */}
       <PWAInstallButton variant="card" />
 
-      {/* Sample Data Controls */}
+      {/* Mode-Aware Reset Controls */}
       <div className="bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] p-5 sm:p-6 space-y-4 shadow-xs">
-        <h3 className="text-xs font-bold uppercase tracking-wider">Sample Business Data</h3>
-        <p className="text-xs text-[#636B76] dark:text-[#8A929C]">
-          Load ready-made suppliers, trucks, bird stock, counter sales, wholesale shops, wages, and shop bills so every screen works together cleanly.
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E3E6E8] dark:border-[#2A2F35] pb-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-[#17807D] dark:text-[#D4F56B]" />
+            <span>{isDemoMode ? 'Demo Sandbox Reset' : 'Reset Application Data'}</span>
+          </h3>
+          <span
+            className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+              isDemoMode
+                ? 'bg-[#17807D]/15 text-[#17807D] dark:bg-[#D4F56B]/20 dark:text-[#D4F56B]'
+                : 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
+            }`}
+          >
+            {isDemoMode ? 'Demo Sandbox (Isolated)' : 'Real Owner Account'}
+          </span>
+        </div>
+
+        <p className="text-xs text-[#636B76] dark:text-[#8A929C] leading-relaxed">
+          {isDemoMode
+            ? 'You are signed into the isolated Demo account. Resetting here refreshes only the 6-month sample history — your real owner records stay completely separate and untouched.'
+            : 'Clear all real business records (suppliers, trucks, bird batches, sales, buyer shops, workers, and shop expenses) to start fresh from zero. Demo mode stays separate and is never affected.'}
         </p>
 
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <button
             type="button"
-            onClick={() => void handleSeed(false)}
-            disabled={seeding}
-            className="min-h-[42px] px-4 py-2 text-xs font-bold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#20242A] hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] disabled:opacity-50 transition flex items-center gap-2 cursor-pointer"
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>{seeding ? 'Loading...' : 'Fill Sample Data (If Empty)'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleSeed(true)}
-            disabled={seeding}
-            className={`min-h-[42px] px-4 py-2 text-xs font-bold rounded-full transition flex items-center gap-2 cursor-pointer ${
-              confirmReset
+            onClick={() => void handleWorkspaceReset()}
+            disabled={resetting}
+            aria-busy={resetting}
+            className={`min-h-[42px] px-5 py-2 text-xs font-bold rounded-full transition flex items-center gap-2 cursor-pointer disabled:opacity-50 ${
+              isDemoMode
+                ? confirmReset
+                  ? 'bg-[#17807D] text-white'
+                  : 'border border-[#17807D]/40 dark:border-[#D4F56B]/40 text-[#17807D] dark:text-[#D4F56B] hover:bg-[#17807D]/10 dark:hover:bg-[#D4F56B]/10'
+                : confirmReset
                 ? 'bg-rose-600 text-white'
                 : 'border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40'
             }`}
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            {isDemoMode ? (
+              <RefreshCw className="w-3.5 h-3.5" />
+            ) : (
+              <Trash2 className="w-3.5 h-3.5" />
+            )}
             <span>
-              {confirmReset
-                ? 'Click Again to Reset All Data'
-                : 'Reset to Fresh Sample Data'}
+              {resetting
+                ? 'Resetting...'
+                : isDemoMode
+                ? confirmReset
+                  ? 'Click Again to Reset Demo Data'
+                  : 'Reset Demo Data (Fresh 6 Months)'
+                : confirmReset
+                ? 'Click Again to Permanently Clear All Records'
+                : 'Reset All Data'}
             </span>
           </button>
+
+          {confirmReset && !resetting && (
+            <button
+              type="button"
+              onClick={() => setConfirmReset(false)}
+              className="min-h-[42px] px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] text-[#4A515B] dark:text-[#A3AAB3] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -1016,6 +1016,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
         {activeDetailTab === 'sales' && (
           <DataTable
             tableId="report-sales"
+            paginationEndpoint="/api/sales"
+            paginationParams={{
+              startDate,
+              endDate,
+              ...(saleTypeFilter !== 'ALL' ? { type: saleTypeFilter } : {}),
+            }}
             title="Sales"
             data={filteredSales}
             columns={salesColumns}
@@ -1058,6 +1064,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
         {activeDetailTab === 'purchases' && (
           <DataTable
             tableId="report-purchases"
+            paginationEndpoint="/api/purchases"
+            paginationParams={{ startDate, endDate }}
             title="Trucks"
             data={data.purchases || []}
             columns={purchaseColumns}
@@ -1077,6 +1085,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
         {activeDetailTab === 'expenses' && (
           <DataTable
             tableId="report-expenses"
+            paginationEndpoint="/api/expenses"
+            paginationParams={{
+              startDate,
+              endDate,
+              ...(expenseCategoryFilter !== 'ALL' ? { category: expenseCategoryFilter } : {}),
+            }}
             title="Shop Bills"
             data={filteredExpenses}
             columns={expenseColumns}
@@ -1103,6 +1117,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
         {activeDetailTab === 'wages' && (
           <DataTable
             tableId="report-wages"
+            paginationEndpoint="/api/worker-payments"
+            paginationParams={{ startDate, endDate }}
             title="Staff Pay"
             data={data.workerPayments || []}
             columns={wageColumns}
@@ -1120,6 +1136,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
         {activeDetailTab === 'dealers' && (
           <DataTable
             tableId="report-dealer-payments"
+            paginationEndpoint="/api/dealer-ledger"
+            paginationParams={{ startDate, endDate, type: 'PAYMENT_CREDIT' }}
             title="Paid to Dealers"
             data={data.dealerPayments || []}
             columns={dealerPmtColumns}

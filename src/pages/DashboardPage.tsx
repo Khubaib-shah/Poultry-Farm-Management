@@ -20,7 +20,7 @@ import { computeDashboardFromCollections } from '../utils/syncCalculations.ts';
 import { NavItemKey } from '../components/shell/FloatingIslandShell.tsx';
 
 interface DashboardPageProps {
-  onNavigate: (tab: NavItemKey) => void;
+  onNavigate: (tab: NavItemKey, subTab?: string) => void;
   onOpenQuickSale: () => void;
   onOpenNewLoad: () => void;
 }
@@ -355,7 +355,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
         {/* Card 2: Sky (Birds Ready to Sell) */}
         <div
-          onClick={() => onNavigate('inventory')}
+          onClick={() => onNavigate('trucks-stock', 'lots')}
           className="rounded-[20px] p-5 bg-[#A9C8FA] text-[#14161A] border border-black/5 shadow-xs flex flex-col justify-between min-h-[150px] transition-transform hover:-translate-y-0.5 cursor-pointer"
         >
           <div className="flex items-center justify-between">
@@ -675,7 +675,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
               <button
                 type="button"
-                onClick={() => onNavigate('own-shop-sales')}
+                onClick={() => onNavigate('sales', 'all')}
                 className="px-3.5 py-1.5 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] text-xs font-bold uppercase tracking-wider transition shrink-0 cursor-pointer"
               >
                 See All
@@ -879,7 +879,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
             <button
               type="button"
-              onClick={() => onNavigate('dealer-ledger')}
+              onClick={() => onNavigate('dealers')}
               className="w-full py-2.5 rounded-xl border border-[#E3E6E8] dark:border-[#2A2F35] hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] text-xs font-bold text-[#14161A] dark:text-[#F2F4F5] uppercase tracking-wider flex items-center justify-center gap-1 transition cursor-pointer"
             >
               <span>See Dealer Accounts</span>
@@ -894,7 +894,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </span>
               <button
                 type="button"
-                onClick={() => onNavigate('purchases')}
+                onClick={() => onNavigate('trucks-stock', 'trucks')}
                 className="text-[11px] font-bold text-[#14161A] dark:text-white hover:underline cursor-pointer"
               >
                 See All

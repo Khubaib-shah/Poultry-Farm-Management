@@ -34,8 +34,15 @@ import {
   verifySessionToken,
   extractTokenFromHeaders,
   getSessionSecret,
+  resolveUserWorkspace,
   SessionPayload,
+  WorkspaceMode,
 } from '../utils/authCrypto.ts';
+import { buildSixMonthDemoDataset } from '../utils/demoData.ts';
+import {
+  parseServerPaginationParams,
+  sortAndPaginateRecords,
+} from '../utils/paginationCache.ts';
 
 const SESSION_COOKIE_NAME = 'checkin_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -73,6 +80,11 @@ function resolveRequestSession(req: Request): SessionPayload | null {
   return verifySessionToken(token, getAuthSecret());
 }
 
+function getRequestWorkspace(req: Request): WorkspaceMode {
+  const authUser = (req as Request & { authUser?: SessionPayload }).authUser;
+  return resolveUserWorkspace(authUser || {});
+}
+
 export const apiRouter = express.Router();
 
 apiRouter.use(express.json());
@@ -104,7 +116,10 @@ function shiftPakistanDate(d: Date = new Date(), deltaDays = 0): string {
 // -------------------------------------------------------------
 apiRouter.get('/health', async (_req: Request, res: Response) => {
   try {
-    const result = await db.select({ count: sql<number>`count(*)` }).from(suppliers);
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(suppliers)
+      .where(eq(suppliers.workspace, 'real'));
     res.json({ status: 'ok', database: 'connected', suppliersCount: result[0]?.count ?? 0 });
   } catch (error: any) {
     console.error('Health check failed:', error);
@@ -127,7 +142,7 @@ apiRouter.post('/auth/login', async (req: Request, res: Response) => {
       .where(sql`lower(${users.email}) = ${rawEmail}`)
       .limit(1);
 
-    if (!user || !verifyPassword(password, user.passwordHash)) {
+    if (!user || user.role === 'demo' || !verifyPassword(password, user.passwordHash)) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
@@ -137,6 +152,7 @@ apiRouter.post('/auth/login', async (req: Request, res: Response) => {
       email: user.email,
       name: user.name || 'Owner',
       role: user.role || 'owner',
+      workspace: resolveUserWorkspace(user),
     };
 
     const token = signSessionToken(sessionUser, getAuthSecret(), SESSION_TTL_SECONDS);
@@ -150,6 +166,44 @@ apiRouter.post('/auth/login', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Login failed:', error);
     return res.status(500).json({ error: 'Unable to sign in right now. Please try again.' });
+  }
+});
+
+apiRouter.post('/auth/demo', async (req: Request, res: Response) => {
+  try {
+    const [demoUser] = await db
+      .select()
+      .from(users)
+      .where(eq(users.uid, 'demo-checkin-me'))
+      .limit(1);
+
+    if (!demoUser) {
+      return res.status(500).json({ error: 'Demo account is not initialized' });
+    }
+
+    // Regenerate fresh 6-month dynamic demo data anchored up to live PKT today
+    await seedSixMonthDemoWorkspace();
+
+    const sessionUser = {
+      id: demoUser.id,
+      uid: demoUser.uid,
+      email: demoUser.email,
+      name: demoUser.name || 'Demo Account',
+      role: 'demo',
+      workspace: 'demo' as WorkspaceMode,
+    };
+
+    const token = signSessionToken(sessionUser, getAuthSecret(), SESSION_TTL_SECONDS);
+    const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    res.setHeader('Set-Cookie', formatSessionCookie(token, SESSION_TTL_SECONDS, isSecure));
+
+    return res.json({
+      user: sessionUser,
+      token,
+    });
+  } catch (error: any) {
+    console.error('Demo login failed:', error);
+    return res.status(500).json({ error: 'Unable to start demo session right now.' });
   }
 });
 
@@ -182,7 +236,13 @@ apiRouter.get('/auth/me', async (req: Request, res: Response) => {
       return res.json({ authenticated: false, user: null });
     }
 
-    return res.json({ authenticated: true, user });
+    return res.json({
+      authenticated: true,
+      user: {
+        ...user,
+        workspace: resolveUserWorkspace(user),
+      },
+    });
   } catch (error: any) {
     console.error('Auth session check failed:', error);
     return res.status(500).json({ error: 'Failed to verify session' });
@@ -203,11 +263,12 @@ apiRouter.use((req: Request, res: Response, next: NextFunction) => {
 // 1. SETTINGS
 // -------------------------------------------------------------
 
-apiRouter.get('/settings', async (_req: Request, res: Response) => {
+apiRouter.get('/settings', async (req: Request, res: Response) => {
   try {
-    const allSettings = await db.select().from(settings);
+    const ws = getRequestWorkspace(req);
+    const allSettings = await db.select().from(settings).where(eq(settings.workspace, ws));
     const config: Record<string, string> = {
-      businessName: 'Al-Madina Poultry Traders',
+      businessName: ws === 'demo' ? 'Al-Madina Poultry Traders (Demo)' : 'Al-Madina Poultry Traders',
       businessLocation: 'Lahore Road, Punjab, Pakistan',
       examplePrice1: '1200',
       examplePrice2: '1500',
@@ -224,17 +285,19 @@ apiRouter.get('/settings', async (_req: Request, res: Response) => {
 
 apiRouter.post('/settings', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const entries = Object.entries(req.body);
     for (const [key, value] of entries) {
       await db
         .insert(settings)
         .values({
+          workspace: ws,
           key,
           value: String(value),
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
-          target: settings.key,
+          target: [settings.workspace, settings.key],
           set: { value: String(value), updatedAt: new Date() },
         });
     }
@@ -247,9 +310,14 @@ apiRouter.post('/settings', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // 2. SUPPLIERS & DEALER LEDGER
 // -------------------------------------------------------------
-apiRouter.get('/suppliers', async (_req: Request, res: Response) => {
+apiRouter.get('/suppliers', async (req: Request, res: Response) => {
   try {
-    const allSuppliers = await db.select().from(suppliers).orderBy(asc(suppliers.name));
+    const ws = getRequestWorkspace(req);
+    const allSuppliers = await db
+      .select()
+      .from(suppliers)
+      .where(eq(suppliers.workspace, ws))
+      .orderBy(asc(suppliers.name));
 
     // Calculate current balance for each supplier from dealer_transactions
     const suppliersWithBalance = await Promise.all(
@@ -257,7 +325,7 @@ apiRouter.get('/suppliers', async (_req: Request, res: Response) => {
         const txs = await db
           .select()
           .from(dealerTransactions)
-          .where(eq(dealerTransactions.supplierId, sup.id))
+          .where(and(eq(dealerTransactions.supplierId, sup.id), eq(dealerTransactions.workspace, ws)))
           .orderBy(desc(dealerTransactions.id))
           .limit(1);
 
@@ -270,7 +338,7 @@ apiRouter.get('/suppliers', async (_req: Request, res: Response) => {
             count: sql<number>`count(*)`,
           })
           .from(purchaseLoads)
-          .where(eq(purchaseLoads.supplierId, sup.id));
+          .where(and(eq(purchaseLoads.supplierId, sup.id), eq(purchaseLoads.workspace, ws)));
 
         return {
           ...sup,
@@ -289,6 +357,7 @@ apiRouter.get('/suppliers', async (_req: Request, res: Response) => {
 
 apiRouter.post('/suppliers', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const { name, phone, address, openingBalance, notes } = req.body;
     if (!name || name.trim() === '') {
       return res.status(400).json({ error: 'Supplier name is required' });
@@ -300,6 +369,7 @@ apiRouter.post('/suppliers', async (req: Request, res: Response) => {
     const [created] = await db
       .insert(suppliers)
       .values({
+        workspace: ws,
         name: name.trim(),
         phone: phone?.trim() || null,
         address: address?.trim() || null,
@@ -311,6 +381,7 @@ apiRouter.post('/suppliers', async (req: Request, res: Response) => {
     // If opening balance != 0, record initial opening transaction
     if (opBal !== 0) {
       await db.insert(dealerTransactions).values({
+        workspace: ws,
         supplierId: created.id,
         transactionDate: getPakistanDate(),
         transactionType: opBal > 0 ? 'PURCHASE_DEBIT' : 'PAYMENT_CREDIT',
@@ -335,8 +406,12 @@ apiRouter.post('/suppliers', async (req: Request, res: Response) => {
 
 apiRouter.get('/suppliers/:id', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const supplierId = parseInt(req.params.id, 10);
-    const [supplier] = await db.select().from(suppliers).where(eq(suppliers.id, supplierId));
+    const [supplier] = await db
+      .select()
+      .from(suppliers)
+      .where(and(eq(suppliers.id, supplierId), eq(suppliers.workspace, ws)));
 
     if (!supplier) {
       return res.status(404).json({ error: 'Supplier not found' });
@@ -346,14 +421,14 @@ apiRouter.get('/suppliers/:id', async (req: Request, res: Response) => {
     const ledger = await db
       .select()
       .from(dealerTransactions)
-      .where(eq(dealerTransactions.supplierId, supplierId))
+      .where(and(eq(dealerTransactions.supplierId, supplierId), eq(dealerTransactions.workspace, ws)))
       .orderBy(desc(dealerTransactions.transactionDate), desc(dealerTransactions.id));
 
     // Purchase history
     const loads = await db
       .select()
       .from(purchaseLoads)
-      .where(eq(purchaseLoads.supplierId, supplierId))
+      .where(and(eq(purchaseLoads.supplierId, supplierId), eq(purchaseLoads.workspace, ws)))
       .orderBy(desc(purchaseLoads.purchaseDate), desc(purchaseLoads.id));
 
     // Calculate totals
@@ -381,6 +456,7 @@ apiRouter.get('/suppliers/:id', async (req: Request, res: Response) => {
 
 apiRouter.put('/suppliers/:id', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const supplierId = parseInt(req.params.id, 10);
     const { name, phone, address, notes } = req.body;
 
@@ -393,8 +469,12 @@ apiRouter.put('/suppliers/:id', async (req: Request, res: Response) => {
         notes: notes?.trim() || null,
         updatedAt: new Date(),
       })
-      .where(eq(suppliers.id, supplierId))
+      .where(and(eq(suppliers.id, supplierId), eq(suppliers.workspace, ws)))
       .returning();
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
 
     res.json(updated);
   } catch (error: any) {
@@ -407,9 +487,20 @@ apiRouter.put('/suppliers/:id', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 apiRouter.get('/dealer-ledger', async (req: Request, res: Response) => {
   try {
-    const supplierId = req.query.supplierId ? parseInt(String(req.query.supplierId), 10) : null;
+    const ws = getRequestWorkspace(req);
+    const { limit, skip, search, sortKey, sortDir, all } = parseServerPaginationParams(
+      req.query as Record<string, unknown>
+    );
+    const supplierIdRaw = req.query.supplierId ? String(req.query.supplierId) : '';
+    const supplierId =
+      supplierIdRaw && supplierIdRaw !== 'ALL' ? parseInt(supplierIdRaw, 10) : null;
+    const typeFilter = req.query.type ? String(req.query.type) : '';
+    const startDate = req.query.startDate ? String(req.query.startDate) : '';
+    const endDate = req.query.endDate ? String(req.query.endDate) : '';
 
-    let query = db
+    const baseWhere = and(eq(dealerTransactions.workspace, ws), eq(suppliers.workspace, ws));
+
+    const records = await db
       .select({
         id: dealerTransactions.id,
         supplierId: dealerTransactions.supplierId,
@@ -427,13 +518,46 @@ apiRouter.get('/dealer-ledger', async (req: Request, res: Response) => {
       })
       .from(dealerTransactions)
       .innerJoin(suppliers, eq(dealerTransactions.supplierId, suppliers.id))
+      .where(
+        supplierId && Number.isFinite(supplierId)
+          ? and(baseWhere, eq(dealerTransactions.supplierId, supplierId))
+          : baseWhere
+      )
       .orderBy(desc(dealerTransactions.transactionDate), desc(dealerTransactions.id));
 
-    const records = supplierId
-      ? await query.where(eq(dealerTransactions.supplierId, supplierId))
-      : await query;
+    let filtered = records;
+    if (typeFilter && typeFilter !== 'ALL') {
+      filtered = filtered.filter((t) => t.transactionType === typeFilter);
+    }
+    if (startDate) {
+      filtered = filtered.filter((t) => String(t.transactionDate) >= startDate);
+    }
+    if (endDate) {
+      filtered = filtered.filter((t) => String(t.transactionDate) <= endDate);
+    }
+    if (search) {
+      filtered = filtered.filter(
+        (t) =>
+          (t.supplierName && t.supplierName.toLowerCase().includes(search)) ||
+          (t.notes && t.notes.toLowerCase().includes(search)) ||
+          (t.paymentMethod && t.paymentMethod.toLowerCase().includes(search)) ||
+          (t.referenceType && t.referenceType.toLowerCase().includes(search))
+      );
+    }
 
-    res.json(records);
+    if (all) {
+      return res.json(filtered);
+    }
+
+    const paginated = sortAndPaginateRecords({
+      records: filtered,
+      limit,
+      skip,
+      sortKey: sortKey || 'transactionDate',
+      sortDir,
+    });
+
+    res.json(paginated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -441,6 +565,7 @@ apiRouter.get('/dealer-ledger', async (req: Request, res: Response) => {
 
 apiRouter.post('/dealer-ledger/payment', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const { supplierId, amount, transactionDate, paymentMethod, notes } = req.body;
     const supId = parseInt(supplierId, 10);
     const paymentAmount = Number(amount);
@@ -449,20 +574,30 @@ apiRouter.post('/dealer-ledger/payment', async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Valid supplier and positive payment amount are required' });
     }
 
+    const [sup] = await db
+      .select()
+      .from(suppliers)
+      .where(and(eq(suppliers.id, supId), eq(suppliers.workspace, ws)));
+
+    if (!sup) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+
     // Get latest balance
     const lastTx = await db
       .select()
       .from(dealerTransactions)
-      .where(eq(dealerTransactions.supplierId, supId))
+      .where(and(eq(dealerTransactions.supplierId, supId), eq(dealerTransactions.workspace, ws)))
       .orderBy(desc(dealerTransactions.id))
       .limit(1);
 
-    const prevBalance = lastTx.length > 0 ? Number(lastTx[0].balanceAfter) : 0;
+    const prevBalance = lastTx.length > 0 ? Number(lastTx[0].balanceAfter) : Number(sup.openingBalance);
     const newBalance = Number((prevBalance - paymentAmount).toFixed(2));
 
     const [tx] = await db
       .insert(dealerTransactions)
       .values({
+        workspace: ws,
         supplierId: supId,
         transactionDate: transactionDate || getPakistanDate(),
         transactionType: 'PAYMENT_CREDIT',
@@ -484,9 +619,14 @@ apiRouter.post('/dealer-ledger/payment', async (req: Request, res: Response) => 
 // -------------------------------------------------------------
 // 4. VEHICLES
 // -------------------------------------------------------------
-apiRouter.get('/vehicles', async (_req: Request, res: Response) => {
+apiRouter.get('/vehicles', async (req: Request, res: Response) => {
   try {
-    const list = await db.select().from(vehicles).orderBy(asc(vehicles.vehicleNumber));
+    const ws = getRequestWorkspace(req);
+    const list = await db
+      .select()
+      .from(vehicles)
+      .where(eq(vehicles.workspace, ws))
+      .orderBy(asc(vehicles.vehicleNumber));
     res.json(list);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -495,6 +635,7 @@ apiRouter.get('/vehicles', async (_req: Request, res: Response) => {
 
 apiRouter.post('/vehicles', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const { vehicleNumber, driverName, driverPhone, notes } = req.body;
     if (!vehicleNumber?.trim()) {
       return res.status(400).json({ error: 'Vehicle number is required' });
@@ -502,6 +643,7 @@ apiRouter.post('/vehicles', async (req: Request, res: Response) => {
     const [created] = await db
       .insert(vehicles)
       .values({
+        workspace: ws,
         vehicleNumber: vehicleNumber.trim().toUpperCase(),
         driverName: driverName?.trim() || null,
         driverPhone: driverPhone?.trim() || null,
@@ -517,61 +659,108 @@ apiRouter.post('/vehicles', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // 5. PURCHASES & LOADS
 // -------------------------------------------------------------
-apiRouter.get('/purchases', async (_req: Request, res: Response) => {
+apiRouter.get('/purchases', async (req: Request, res: Response) => {
   try {
-    const loads = await db
-      .select({
-        id: purchaseLoads.id,
-        loadNumber: purchaseLoads.loadNumber,
-        supplierId: purchaseLoads.supplierId,
-        supplierName: suppliers.name,
-        purchaseDate: purchaseLoads.purchaseDate,
-        totalWeightKg: purchaseLoads.totalWeightKg,
-        purchaseAmount: purchaseLoads.purchaseAmount,
-        vehicleNumber: purchaseLoads.vehicleNumber,
-        driverName: purchaseLoads.driverName,
-        status: purchaseLoads.status,
-        notes: purchaseLoads.notes,
-        createdAt: purchaseLoads.createdAt,
-      })
-      .from(purchaseLoads)
-      .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
-      .orderBy(desc(purchaseLoads.purchaseDate), desc(purchaseLoads.id));
-
-    // Populate expenses and stock batch summary for each load
-    const result = await Promise.all(
-      loads.map(async (load) => {
-        const expenses = await db
-          .select({
-            totalExpenses: sql<string>`coalesce(sum(amount), '0')`,
-          })
-          .from(loadExpenses)
-          .where(eq(loadExpenses.purchaseLoadId, load.id));
-
-        const batch = await db
-          .select()
-          .from(stockBatches)
-          .where(eq(stockBatches.purchaseLoadId, load.id))
-          .limit(1);
-
-        const totalExp = Number(expenses[0]?.totalExpenses || 0);
-        const landedCost = calculateLandedCost(Number(load.purchaseAmount), totalExp);
-        const purchaseRatePerKg = calculatePurchaseRate(
-          Number(load.purchaseAmount),
-          Number(load.totalWeightKg)
-        );
-
-        return {
-          ...load,
-          purchaseRatePerKg,
-          totalExpenses: totalExp,
-          totalLandedCost: landedCost,
-          stockBatch: batch[0] || null,
-        };
-      })
+    const ws = getRequestWorkspace(req);
+    const { limit, skip, search, sortKey, sortDir, all } = parseServerPaginationParams(
+      req.query as Record<string, unknown>
     );
+    const statusFilter = req.query.status ? String(req.query.status) : '';
+    const supplierIdRaw = req.query.supplierId ? String(req.query.supplierId) : '';
+    const supplierIdFilter =
+      supplierIdRaw && supplierIdRaw !== 'ALL' ? parseInt(supplierIdRaw, 10) : null;
+    const startDate = req.query.startDate ? String(req.query.startDate) : '';
+    const endDate = req.query.endDate ? String(req.query.endDate) : '';
 
-    res.json(result);
+    const [loads, allLoadExps, allBatches] = await Promise.all([
+      db
+        .select({
+          id: purchaseLoads.id,
+          loadNumber: purchaseLoads.loadNumber,
+          supplierId: purchaseLoads.supplierId,
+          supplierName: suppliers.name,
+          purchaseDate: purchaseLoads.purchaseDate,
+          totalWeightKg: purchaseLoads.totalWeightKg,
+          purchaseAmount: purchaseLoads.purchaseAmount,
+          vehicleNumber: purchaseLoads.vehicleNumber,
+          driverName: purchaseLoads.driverName,
+          status: purchaseLoads.status,
+          notes: purchaseLoads.notes,
+          createdAt: purchaseLoads.createdAt,
+        })
+        .from(purchaseLoads)
+        .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
+        .where(and(eq(purchaseLoads.workspace, ws), eq(suppliers.workspace, ws)))
+        .orderBy(desc(purchaseLoads.purchaseDate), desc(purchaseLoads.id)),
+      db.select().from(loadExpenses).where(eq(loadExpenses.workspace, ws)),
+      db.select().from(stockBatches).where(eq(stockBatches.workspace, ws)),
+    ]);
+
+    const expByLoad = new Map<number, typeof allLoadExps>();
+    for (const exp of allLoadExps) {
+      const list = expByLoad.get(exp.purchaseLoadId);
+      if (list) list.push(exp);
+      else expByLoad.set(exp.purchaseLoadId, [exp]);
+    }
+    const batchByLoad = new Map<number, (typeof allBatches)[number]>();
+    for (const b of allBatches) {
+      batchByLoad.set(b.purchaseLoadId, b);
+    }
+
+    let enriched = loads.map((load) => {
+      const exps = expByLoad.get(load.id) || [];
+      const totalExp = exps.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+      const landedCost = calculateLandedCost(Number(load.purchaseAmount), totalExp);
+      const purchaseRatePerKg = calculatePurchaseRate(
+        Number(load.purchaseAmount),
+        Number(load.totalWeightKg)
+      );
+      return {
+        ...load,
+        expenses: exps,
+        purchaseRatePerKg,
+        totalExpenses: totalExp,
+        totalLandedCost: landedCost,
+        stockBatch: batchByLoad.get(load.id) || null,
+      };
+    });
+
+    if (statusFilter && statusFilter !== 'ALL') {
+      enriched = enriched.filter((l) => l.status === statusFilter);
+    }
+    if (supplierIdFilter && Number.isFinite(supplierIdFilter)) {
+      enriched = enriched.filter((l) => l.supplierId === supplierIdFilter);
+    }
+    if (startDate) {
+      enriched = enriched.filter((l) => String(l.purchaseDate) >= startDate);
+    }
+    if (endDate) {
+      enriched = enriched.filter((l) => String(l.purchaseDate) <= endDate);
+    }
+    if (search) {
+      enriched = enriched.filter(
+        (l) =>
+          l.loadNumber.toLowerCase().includes(search) ||
+          l.supplierName.toLowerCase().includes(search) ||
+          (l.vehicleNumber && l.vehicleNumber.toLowerCase().includes(search)) ||
+          (l.driverName && l.driverName.toLowerCase().includes(search)) ||
+          (l.notes && l.notes.toLowerCase().includes(search))
+      );
+    }
+
+    if (all) {
+      return res.json(enriched);
+    }
+
+    const paginated = sortAndPaginateRecords({
+      records: enriched,
+      limit,
+      skip,
+      sortKey: sortKey || 'purchaseDate',
+      sortDir,
+    });
+
+    res.json(paginated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -579,6 +768,7 @@ apiRouter.get('/purchases', async (_req: Request, res: Response) => {
 
 apiRouter.post('/purchases', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const {
       supplierId,
       purchaseDate,
@@ -599,17 +789,37 @@ apiRouter.post('/purchases', async (req: Request, res: Response) => {
       });
     }
 
-    // Auto-generate load number: LOAD-YYYYMMDD-XXXX
+    const [sup] = await db
+      .select()
+      .from(suppliers)
+      .where(and(eq(suppliers.id, supId), eq(suppliers.workspace, ws)));
+
+    if (!sup) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+
+    // Auto-generate load number scoped cleanly to this workspace: LOAD-YYYYMMDD-XXX
     const dateStr = purchaseDate || getPakistanDate();
-    const countToday = await db
+    const countRows = await db
       .select({ count: sql<number>`count(*)` })
-      .from(purchaseLoads);
-    const loadNumber = `LOAD-${dateStr.replace(/-/g, '')}-${String(Number(countToday[0]?.count || 0) + 1).padStart(3, '0')}`;
+      .from(purchaseLoads)
+      .where(eq(purchaseLoads.workspace, ws));
+    let seq = Number(countRows[0]?.count || 0) + 1;
+    let loadNumber = `LOAD-${dateStr.replace(/-/g, '')}-${String(seq).padStart(3, '0')}`;
+    const existingLoadNum = await db
+      .select({ id: purchaseLoads.id })
+      .from(purchaseLoads)
+      .where(and(eq(purchaseLoads.workspace, ws), eq(purchaseLoads.loadNumber, loadNumber)))
+      .limit(1);
+    if (existingLoadNum.length > 0) {
+      loadNumber = `LOAD-${dateStr.replace(/-/g, '')}-${String(Date.now()).slice(-5)}`;
+    }
 
     // Insert purchase load
     const [newLoad] = await db
       .insert(purchaseLoads)
       .values({
+        workspace: ws,
         loadNumber,
         supplierId: supId,
         purchaseDate: dateStr,
@@ -626,14 +836,15 @@ apiRouter.post('/purchases', async (req: Request, res: Response) => {
     const lastTx = await db
       .select()
       .from(dealerTransactions)
-      .where(eq(dealerTransactions.supplierId, supId))
+      .where(and(eq(dealerTransactions.supplierId, supId), eq(dealerTransactions.workspace, ws)))
       .orderBy(desc(dealerTransactions.id))
       .limit(1);
 
-    const prevBalance = lastTx.length > 0 ? Number(lastTx[0].balanceAfter) : 0;
+    const prevBalance = lastTx.length > 0 ? Number(lastTx[0].balanceAfter) : Number(sup.openingBalance);
     const newBalance = Number((prevBalance + amount).toFixed(2));
 
     await db.insert(dealerTransactions).values({
+      workspace: ws,
       supplierId: supId,
       transactionDate: dateStr,
       transactionType: 'PURCHASE_DEBIT',
@@ -653,6 +864,7 @@ apiRouter.post('/purchases', async (req: Request, res: Response) => {
 
 apiRouter.get('/purchases/:id', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const loadId = parseInt(req.params.id, 10);
     const [load] = await db
       .select({
@@ -672,7 +884,7 @@ apiRouter.get('/purchases/:id', async (req: Request, res: Response) => {
       })
       .from(purchaseLoads)
       .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
-      .where(eq(purchaseLoads.id, loadId));
+      .where(and(eq(purchaseLoads.id, loadId), eq(purchaseLoads.workspace, ws)));
 
     if (!load) {
       return res.status(404).json({ error: 'Purchase load not found' });
@@ -681,13 +893,13 @@ apiRouter.get('/purchases/:id', async (req: Request, res: Response) => {
     const expenses = await db
       .select()
       .from(loadExpenses)
-      .where(eq(loadExpenses.purchaseLoadId, loadId))
+      .where(and(eq(loadExpenses.purchaseLoadId, loadId), eq(loadExpenses.workspace, ws)))
       .orderBy(asc(loadExpenses.id));
 
     const [batch] = await db
       .select()
       .from(stockBatches)
-      .where(eq(stockBatches.purchaseLoadId, loadId));
+      .where(and(eq(stockBatches.purchaseLoadId, loadId), eq(stockBatches.workspace, ws)));
 
     const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
     const totalLandedCost = calculateLandedCost(Number(load.purchaseAmount), totalExpenses);
@@ -713,6 +925,7 @@ apiRouter.get('/purchases/:id', async (req: Request, res: Response) => {
 // Load Expenses
 apiRouter.post('/purchases/:id/expenses', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const loadId = parseInt(req.params.id, 10);
     const { category, amount, expenseDate, description } = req.body;
     const expAmount = Number(amount);
@@ -721,7 +934,10 @@ apiRouter.post('/purchases/:id/expenses', async (req: Request, res: Response) =>
       return res.status(400).json({ error: 'Category and positive amount are required' });
     }
 
-    const [load] = await db.select().from(purchaseLoads).where(eq(purchaseLoads.id, loadId));
+    const [load] = await db
+      .select()
+      .from(purchaseLoads)
+      .where(and(eq(purchaseLoads.id, loadId), eq(purchaseLoads.workspace, ws)));
     if (!load) {
       return res.status(404).json({ error: 'Purchase load not found' });
     }
@@ -729,6 +945,7 @@ apiRouter.post('/purchases/:id/expenses', async (req: Request, res: Response) =>
     const [expense] = await db
       .insert(loadExpenses)
       .values({
+        workspace: ws,
         purchaseLoadId: loadId,
         category,
         amount: expAmount.toFixed(2),
@@ -741,13 +958,13 @@ apiRouter.post('/purchases/:id/expenses', async (req: Request, res: Response) =>
     const [batch] = await db
       .select()
       .from(stockBatches)
-      .where(eq(stockBatches.purchaseLoadId, loadId));
+      .where(and(eq(stockBatches.purchaseLoadId, loadId), eq(stockBatches.workspace, ws)));
 
     if (batch) {
       const allExpenses = await db
         .select({ total: sql<string>`coalesce(sum(amount), '0')` })
         .from(loadExpenses)
-        .where(eq(loadExpenses.purchaseLoadId, loadId));
+        .where(and(eq(loadExpenses.purchaseLoadId, loadId), eq(loadExpenses.workspace, ws)));
 
       const totalExp = Number(allExpenses[0]?.total || 0);
       const landedCost = calculateLandedCost(Number(load.purchaseAmount), totalExp);
@@ -760,7 +977,7 @@ apiRouter.post('/purchases/:id/expenses', async (req: Request, res: Response) =>
           totalLandedCost: landedCost.toFixed(2),
           costPerPiece: costPerPiece.toFixed(2),
         })
-        .where(eq(stockBatches.id, batch.id));
+        .where(and(eq(stockBatches.id, batch.id), eq(stockBatches.workspace, ws)));
     }
 
     res.status(201).json(expense);
@@ -771,25 +988,39 @@ apiRouter.post('/purchases/:id/expenses', async (req: Request, res: Response) =>
 
 apiRouter.delete('/purchases/:id/expenses/:expenseId', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const loadId = parseInt(req.params.id, 10);
     const expId = parseInt(req.params.expenseId, 10);
 
+    const [load] = await db
+      .select()
+      .from(purchaseLoads)
+      .where(and(eq(purchaseLoads.id, loadId), eq(purchaseLoads.workspace, ws)));
+    if (!load) {
+      return res.status(404).json({ error: 'Purchase load not found' });
+    }
+
     await db
       .delete(loadExpenses)
-      .where(and(eq(loadExpenses.id, expId), eq(loadExpenses.purchaseLoadId, loadId)));
+      .where(
+        and(
+          eq(loadExpenses.id, expId),
+          eq(loadExpenses.purchaseLoadId, loadId),
+          eq(loadExpenses.workspace, ws)
+        )
+      );
 
     // Recalculate batch if exists
     const [batch] = await db
       .select()
       .from(stockBatches)
-      .where(eq(stockBatches.purchaseLoadId, loadId));
+      .where(and(eq(stockBatches.purchaseLoadId, loadId), eq(stockBatches.workspace, ws)));
 
     if (batch) {
-      const [load] = await db.select().from(purchaseLoads).where(eq(purchaseLoads.id, loadId));
       const allExpenses = await db
         .select({ total: sql<string>`coalesce(sum(amount), '0')` })
         .from(loadExpenses)
-        .where(eq(loadExpenses.purchaseLoadId, loadId));
+        .where(and(eq(loadExpenses.purchaseLoadId, loadId), eq(loadExpenses.workspace, ws)));
 
       const totalExp = Number(allExpenses[0]?.total || 0);
       const landedCost = calculateLandedCost(Number(load.purchaseAmount), totalExp);
@@ -802,7 +1033,7 @@ apiRouter.delete('/purchases/:id/expenses/:expenseId', async (req: Request, res:
           totalLandedCost: landedCost.toFixed(2),
           costPerPiece: costPerPiece.toFixed(2),
         })
-        .where(eq(stockBatches.id, batch.id));
+        .where(and(eq(stockBatches.id, batch.id), eq(stockBatches.workspace, ws)));
     }
 
     res.json({ success: true });
@@ -816,6 +1047,7 @@ apiRouter.delete('/purchases/:id/expenses/:expenseId', async (req: Request, res:
 // -------------------------------------------------------------
 apiRouter.post('/purchases/:id/receive', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const loadId = parseInt(req.params.id, 10);
     const { receivingDate, receivedPieces, deadPieces, damagedPieces, notes } = req.body;
 
@@ -827,7 +1059,10 @@ apiRouter.post('/purchases/:id/receive', async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Actual received pieces must be greater than zero' });
     }
 
-    const [load] = await db.select().from(purchaseLoads).where(eq(purchaseLoads.id, loadId));
+    const [load] = await db
+      .select()
+      .from(purchaseLoads)
+      .where(and(eq(purchaseLoads.id, loadId), eq(purchaseLoads.workspace, ws)));
     if (!load) {
       return res.status(404).json({ error: 'Purchase load not found' });
     }
@@ -836,7 +1071,7 @@ apiRouter.post('/purchases/:id/receive', async (req: Request, res: Response) => 
     const [existingBatch] = await db
       .select()
       .from(stockBatches)
-      .where(eq(stockBatches.purchaseLoadId, loadId));
+      .where(and(eq(stockBatches.purchaseLoadId, loadId), eq(stockBatches.workspace, ws)));
 
     if (existingBatch) {
       return res.status(400).json({
@@ -850,7 +1085,7 @@ apiRouter.post('/purchases/:id/receive', async (req: Request, res: Response) => 
     const expensesRes = await db
       .select({ total: sql<string>`coalesce(sum(amount), '0')` })
       .from(loadExpenses)
-      .where(eq(loadExpenses.purchaseLoadId, loadId));
+      .where(and(eq(loadExpenses.purchaseLoadId, loadId), eq(loadExpenses.workspace, ws)));
 
     const totalLoadExpenses = Number(expensesRes[0]?.total || 0);
     const totalLandedCost = calculateLandedCost(Number(load.purchaseAmount), totalLoadExpenses);
@@ -862,6 +1097,7 @@ apiRouter.post('/purchases/:id/receive', async (req: Request, res: Response) => 
     const [createdBatch] = await db
       .insert(stockBatches)
       .values({
+        workspace: ws,
         batchNumber,
         purchaseLoadId: loadId,
         receivingDate: receivingDate || getPakistanDate(),
@@ -883,6 +1119,7 @@ apiRouter.post('/purchases/:id/receive', async (req: Request, res: Response) => 
     // Record stock movement (STOCK_IN)
     if (saleablePieces > 0) {
       await db.insert(stockMovements).values({
+        workspace: ws,
         stockBatchId: createdBatch.id,
         movementType: 'STOCK_IN',
         quantity: saleablePieces,
@@ -898,7 +1135,7 @@ apiRouter.post('/purchases/:id/receive', async (req: Request, res: Response) => 
     await db
       .update(purchaseLoads)
       .set({ status: 'RECEIVED' })
-      .where(eq(purchaseLoads.id, loadId));
+      .where(and(eq(purchaseLoads.id, loadId), eq(purchaseLoads.workspace, ws)));
 
     res.status(201).json(createdBatch);
   } catch (error: any) {
@@ -909,8 +1146,17 @@ apiRouter.post('/purchases/:id/receive', async (req: Request, res: Response) => 
 // -------------------------------------------------------------
 // 7. INVENTORY MANAGEMENT
 // -------------------------------------------------------------
-apiRouter.get('/inventory/batches', async (_req: Request, res: Response) => {
+apiRouter.get('/inventory/batches', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
+    const { limit, skip, search, sortKey, sortDir, all } = parseServerPaginationParams(
+      req.query as Record<string, unknown>
+    );
+    const effectiveSortDir = req.query.sortDir ? sortDir : 'asc';
+    const statusFilter = req.query.status ? String(req.query.status) : '';
+    const startDate = req.query.startDate ? String(req.query.startDate) : '';
+    const endDate = req.query.endDate ? String(req.query.endDate) : '';
+
     const batches = await db
       .select({
         id: stockBatches.id,
@@ -936,9 +1182,56 @@ apiRouter.get('/inventory/batches', async (_req: Request, res: Response) => {
       .from(stockBatches)
       .innerJoin(purchaseLoads, eq(stockBatches.purchaseLoadId, purchaseLoads.id))
       .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
+      .where(
+        and(
+          eq(stockBatches.workspace, ws),
+          eq(purchaseLoads.workspace, ws),
+          eq(suppliers.workspace, ws)
+        )
+      )
       .orderBy(asc(stockBatches.receivingDate), asc(stockBatches.id));
 
-    res.json(batches);
+    let filtered = batches;
+    if (statusFilter === 'ACTIVE') {
+      filtered = filtered.filter((b) => !b.isClosed && Number(b.remainingPieces) > 0);
+    } else if (statusFilter === 'DEPLETED') {
+      filtered = filtered.filter((b) => b.isClosed || Number(b.remainingPieces) === 0);
+    }
+    if (startDate) {
+      filtered = filtered.filter((b) => String(b.receivingDate) >= startDate);
+    }
+    if (endDate) {
+      filtered = filtered.filter((b) => String(b.receivingDate) <= endDate);
+    }
+    if (search) {
+      filtered = filtered.filter(
+        (b) =>
+          b.batchNumber.toLowerCase().includes(search) ||
+          b.loadNumber.toLowerCase().includes(search) ||
+          b.supplierName.toLowerCase().includes(search) ||
+          (b.notes && b.notes.toLowerCase().includes(search))
+      );
+    }
+
+    if (all) {
+      return res.json(filtered);
+    }
+
+    const paginated = sortAndPaginateRecords({
+      records: filtered,
+      limit,
+      skip,
+      sortKey: sortKey || 'receivingDate',
+      sortDir: effectiveSortDir,
+      getSortValue: (row, key) => {
+        if (key === 'status') {
+          return row.isClosed ? 0 : row.remainingPieces;
+        }
+        return (row as Record<string, unknown>)[key];
+      },
+    });
+
+    res.json(paginated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -946,7 +1239,14 @@ apiRouter.get('/inventory/batches', async (_req: Request, res: Response) => {
 
 apiRouter.get('/inventory/movements', async (req: Request, res: Response) => {
   try {
-    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 100;
+    const ws = getRequestWorkspace(req);
+    const { limit, skip, search, sortKey, sortDir, all } = parseServerPaginationParams(
+      req.query as Record<string, unknown>
+    );
+    const typeFilter = req.query.type ? String(req.query.type) : '';
+    const batchIdRaw = req.query.stockBatchId ? String(req.query.stockBatchId) : '';
+    const batchIdFilter = batchIdRaw ? parseInt(batchIdRaw, 10) : null;
+
     const movements = await db
       .select({
         id: stockMovements.id,
@@ -963,10 +1263,38 @@ apiRouter.get('/inventory/movements', async (req: Request, res: Response) => {
       })
       .from(stockMovements)
       .innerJoin(stockBatches, eq(stockMovements.stockBatchId, stockBatches.id))
-      .orderBy(desc(stockMovements.createdAt), desc(stockMovements.id))
-      .limit(limit);
+      .where(and(eq(stockMovements.workspace, ws), eq(stockBatches.workspace, ws)))
+      .orderBy(desc(stockMovements.createdAt), desc(stockMovements.id));
 
-    res.json(movements);
+    let filtered = movements;
+    if (typeFilter && typeFilter !== 'ALL') {
+      filtered = filtered.filter((m) => m.movementType === typeFilter);
+    }
+    if (batchIdFilter && Number.isFinite(batchIdFilter)) {
+      filtered = filtered.filter((m) => m.stockBatchId === batchIdFilter);
+    }
+    if (search) {
+      filtered = filtered.filter(
+        (m) =>
+          m.batchNumber.toLowerCase().includes(search) ||
+          m.movementType.toLowerCase().includes(search) ||
+          (m.notes && m.notes.toLowerCase().includes(search))
+      );
+    }
+
+    if (all) {
+      return res.json(filtered);
+    }
+
+    const paginated = sortAndPaginateRecords({
+      records: filtered,
+      limit,
+      skip,
+      sortKey: sortKey || 'createdAt',
+      sortDir,
+    });
+
+    res.json(paginated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -975,6 +1303,7 @@ apiRouter.get('/inventory/movements', async (req: Request, res: Response) => {
 // Manual Stock Adjustment
 apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const { stockBatchId, quantityChange, reason, adjustmentType } = req.body;
     const batchId = parseInt(stockBatchId, 10);
     const change = parseInt(quantityChange, 10); // negative for write-off, positive for count correction
@@ -983,7 +1312,10 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Valid batch and non-zero adjustment quantity required' });
     }
 
-    const [batch] = await db.select().from(stockBatches).where(eq(stockBatches.id, batchId));
+    const [batch] = await db
+      .select()
+      .from(stockBatches)
+      .where(and(eq(stockBatches.id, batchId), eq(stockBatches.workspace, ws)));
     if (!batch) {
       return res.status(404).json({ error: 'Stock batch not found' });
     }
@@ -1001,13 +1333,14 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
         remainingPieces: newRemaining,
         isClosed: newRemaining === 0,
       })
-      .where(eq(stockBatches.id, batchId));
+      .where(and(eq(stockBatches.id, batchId), eq(stockBatches.workspace, ws)));
 
     const movType = adjustmentType || (change < 0 ? 'DAMAGE' : 'ADJUSTMENT');
 
     const [mov] = await db
       .insert(stockMovements)
       .values({
+        workspace: ws,
         stockBatchId: batchId,
         movementType: movType,
         quantity: change,
@@ -1029,11 +1362,18 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 apiRouter.get('/sales', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
+    const { limit, skip, search, sortKey, sortDir, all } = parseServerPaginationParams(
+      req.query as Record<string, unknown>
+    );
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
     const type = req.query.type as string;
+    const shopIdRaw = req.query.shopId ? String(req.query.shopId) : '';
+    const shopIdFilter = shopIdRaw && shopIdRaw !== 'ALL' ? parseInt(shopIdRaw, 10) : null;
+    const datePreset = req.query.datePreset ? String(req.query.datePreset) : '';
 
-    let query = db
+    const records = await db
       .select({
         id: sales.id,
         invoiceNumber: sales.invoiceNumber,
@@ -1053,23 +1393,57 @@ apiRouter.get('/sales', async (req: Request, res: Response) => {
       })
       .from(sales)
       .leftJoin(shops, eq(sales.shopId, shops.id))
+      .where(eq(sales.workspace, ws))
       .orderBy(desc(sales.saleDate), desc(sales.id));
 
-    const records = await query;
-
-    // Filter in-memory or by query
     let filtered = records;
+    const todayStr = getPakistanDate();
+    if (datePreset === 'TODAY') {
+      filtered = filtered.filter((s) => s.saleDate === todayStr);
+    } else if (datePreset === 'MONTH') {
+      filtered = filtered.filter((s) => s.saleDate.startsWith(todayStr.slice(0, 7)));
+    }
     if (startDate) {
       filtered = filtered.filter((s) => s.saleDate >= startDate);
     }
     if (endDate) {
       filtered = filtered.filter((s) => s.saleDate <= endDate);
     }
-    if (type) {
+    if (type && type !== 'ALL') {
       filtered = filtered.filter((s) => s.saleType === type);
     }
+    if (shopIdFilter && Number.isFinite(shopIdFilter)) {
+      filtered = filtered.filter((s) => s.shopId === shopIdFilter);
+    }
+    if (search) {
+      filtered = filtered.filter(
+        (s) =>
+          s.invoiceNumber.toLowerCase().includes(search) ||
+          (s.shopName && s.shopName.toLowerCase().includes(search)) ||
+          (s.notes && s.notes.toLowerCase().includes(search)) ||
+          (s.saleType === 'OWN_SHOP' && 'walk-in shop'.includes(search))
+      );
+    }
 
-    res.json(filtered);
+    if (all) {
+      return res.json(filtered);
+    }
+
+    const paginated = sortAndPaginateRecords({
+      records: filtered,
+      limit,
+      skip,
+      sortKey: sortKey || 'saleDate',
+      sortDir,
+      getSortValue: (row, key) => {
+        if (key === 'channel') {
+          return row.saleType === 'OWN_SHOP' ? 'Walk-in Shop' : row.shopName || 'Other Shop';
+        }
+        return (row as Record<string, unknown>)[key];
+      },
+    });
+
+    res.json(paginated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1077,6 +1451,7 @@ apiRouter.get('/sales', async (req: Request, res: Response) => {
 
 apiRouter.get('/sales/:id', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const saleId = parseInt(req.params.id, 10);
     const [sale] = await db
       .select({
@@ -1098,7 +1473,7 @@ apiRouter.get('/sales/:id', async (req: Request, res: Response) => {
       })
       .from(sales)
       .leftJoin(shops, eq(sales.shopId, shops.id))
-      .where(eq(sales.id, saleId));
+      .where(and(eq(sales.id, saleId), eq(sales.workspace, ws)));
 
     if (!sale) {
       return res.status(404).json({ error: 'Sale not found' });
@@ -1116,7 +1491,7 @@ apiRouter.get('/sales/:id', async (req: Request, res: Response) => {
       })
       .from(saleItems)
       .innerJoin(stockBatches, eq(saleItems.stockBatchId, stockBatches.id))
-      .where(eq(saleItems.saleId, saleId));
+      .where(and(eq(saleItems.saleId, saleId), eq(saleItems.workspace, ws)));
 
     res.json({ ...sale, items });
   } catch (error: any) {
@@ -1127,6 +1502,7 @@ apiRouter.get('/sales/:id', async (req: Request, res: Response) => {
 // Own Shop Sale (Ultra Simple Form)
 apiRouter.post('/sales/own-shop', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const { saleDate, quantityPieces, totalSaleAmount, notes } = req.body;
     const pieces = parseInt(quantityPieces, 10);
     const amount = Number(totalSaleAmount);
@@ -1146,7 +1522,13 @@ apiRouter.post('/sales/own-shop', async (req: Request, res: Response) => {
         costPerPiece: stockBatches.costPerPiece,
       })
       .from(stockBatches)
-      .where(and(eq(stockBatches.isClosed, false), gte(stockBatches.remainingPieces, 1)))
+      .where(
+        and(
+          eq(stockBatches.workspace, ws),
+          eq(stockBatches.isClosed, false),
+          gte(stockBatches.remainingPieces, 1)
+        )
+      )
       .orderBy(asc(stockBatches.receivingDate), asc(stockBatches.id));
 
     const totalStockAvailable = availableBatches.reduce((sum, b) => sum + b.remainingPieces, 0);
@@ -1173,15 +1555,27 @@ apiRouter.post('/sales/own-shop', async (req: Request, res: Response) => {
     // 3. Compute sale financial metrics
     const metrics = calculateSaleMetrics(amount, pieces, fifoResult.totalCost);
 
-    // Generate invoice number: INV-YYYYMMDD-XXXX
+    // Generate invoice number scoped to workspace: INV-YYYYMMDD-XXXX
     const dateStr = saleDate || getPakistanDate();
-    const maxSale = await db.select({ maxId: sql<number>`coalesce(max(id), 0)` }).from(sales);
-    const invoiceNumber = `INV-${dateStr.replace(/-/g, '')}-${String(Number(maxSale[0]?.maxId || 0) + 1).padStart(4, '0')}`;
+    const countRows = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(sales)
+      .where(eq(sales.workspace, ws));
+    let invoiceNumber = `INV-${dateStr.replace(/-/g, '')}-${String(Number(countRows[0]?.count || 0) + 1).padStart(4, '0')}`;
+    const existingInv = await db
+      .select({ id: sales.id })
+      .from(sales)
+      .where(and(eq(sales.workspace, ws), eq(sales.invoiceNumber, invoiceNumber)))
+      .limit(1);
+    if (existingInv.length > 0) {
+      invoiceNumber = `INV-${dateStr.replace(/-/g, '')}-${String(Date.now()).slice(-5)}`;
+    }
 
     // 4. Save sale record
     const [savedSale] = await db
       .insert(sales)
       .values({
+        workspace: ws,
         invoiceNumber,
         saleType: 'OWN_SHOP',
         saleDate: dateStr,
@@ -1199,6 +1593,7 @@ apiRouter.post('/sales/own-shop', async (req: Request, res: Response) => {
     // 5. Update each consumed stock batch, insert saleItems and stockMovements
     for (const item of fifoResult.consumedBatches) {
       await db.insert(saleItems).values({
+        workspace: ws,
         saleId: savedSale.id,
         stockBatchId: item.batchId,
         quantity: item.quantity,
@@ -1210,7 +1605,7 @@ apiRouter.post('/sales/own-shop', async (req: Request, res: Response) => {
       const [currentBatch] = await db
         .select()
         .from(stockBatches)
-        .where(eq(stockBatches.id, item.batchId));
+        .where(and(eq(stockBatches.id, item.batchId), eq(stockBatches.workspace, ws)));
 
       const newRemaining = currentBatch.remainingPieces - item.quantity;
       const newSold = currentBatch.soldPieces + item.quantity;
@@ -1222,10 +1617,11 @@ apiRouter.post('/sales/own-shop', async (req: Request, res: Response) => {
           soldPieces: newSold,
           isClosed: newRemaining === 0,
         })
-        .where(eq(stockBatches.id, item.batchId));
+        .where(and(eq(stockBatches.id, item.batchId), eq(stockBatches.workspace, ws)));
 
       // Record stock movement
       await db.insert(stockMovements).values({
+        workspace: ws,
         stockBatchId: item.batchId,
         movementType: 'SALE_OUT',
         quantity: -item.quantity,
@@ -1259,6 +1655,7 @@ apiRouter.post('/sales/own-shop', async (req: Request, res: Response) => {
 // Wholesale Distribution Sale
 apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const { shopId, saleDate, quantityPieces, totalSaleAmount, notes } = req.body;
     const sId = parseInt(shopId, 10);
     const pieces = parseInt(quantityPieces, 10);
@@ -1270,7 +1667,10 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
       });
     }
 
-    const [targetShop] = await db.select().from(shops).where(eq(shops.id, sId));
+    const [targetShop] = await db
+      .select()
+      .from(shops)
+      .where(and(eq(shops.id, sId), eq(shops.workspace, ws)));
     if (!targetShop) {
       return res.status(404).json({ error: 'Selected shop not found' });
     }
@@ -1284,7 +1684,13 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
         costPerPiece: stockBatches.costPerPiece,
       })
       .from(stockBatches)
-      .where(and(eq(stockBatches.isClosed, false), gte(stockBatches.remainingPieces, 1)))
+      .where(
+        and(
+          eq(stockBatches.workspace, ws),
+          eq(stockBatches.isClosed, false),
+          gte(stockBatches.remainingPieces, 1)
+        )
+      )
       .orderBy(asc(stockBatches.receivingDate), asc(stockBatches.id));
 
     const totalStockAvailable = availableBatches.reduce((sum, b) => sum + b.remainingPieces, 0);
@@ -1306,12 +1712,24 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
     const metrics = calculateSaleMetrics(amount, pieces, fifoResult.totalCost);
 
     const dateStr = saleDate || getPakistanDate();
-    const maxSale = await db.select({ maxId: sql<number>`coalesce(max(id), 0)` }).from(sales);
-    const invoiceNumber = `WHL-${dateStr.replace(/-/g, '')}-${String(Number(maxSale[0]?.maxId || 0) + 1).padStart(4, '0')}`;
+    const countRows = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(sales)
+      .where(eq(sales.workspace, ws));
+    let invoiceNumber = `WHL-${dateStr.replace(/-/g, '')}-${String(Number(countRows[0]?.count || 0) + 1).padStart(4, '0')}`;
+    const existingInv = await db
+      .select({ id: sales.id })
+      .from(sales)
+      .where(and(eq(sales.workspace, ws), eq(sales.invoiceNumber, invoiceNumber)))
+      .limit(1);
+    if (existingInv.length > 0) {
+      invoiceNumber = `WHL-${dateStr.replace(/-/g, '')}-${String(Date.now()).slice(-5)}`;
+    }
 
     const [savedSale] = await db
       .insert(sales)
       .values({
+        workspace: ws,
         invoiceNumber,
         saleType: 'WHOLESALE',
         saleDate: dateStr,
@@ -1329,6 +1747,7 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
 
     for (const item of fifoResult.consumedBatches) {
       await db.insert(saleItems).values({
+        workspace: ws,
         saleId: savedSale.id,
         stockBatchId: item.batchId,
         quantity: item.quantity,
@@ -1339,7 +1758,7 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
       const [currentBatch] = await db
         .select()
         .from(stockBatches)
-        .where(eq(stockBatches.id, item.batchId));
+        .where(and(eq(stockBatches.id, item.batchId), eq(stockBatches.workspace, ws)));
 
       const newRemaining = currentBatch.remainingPieces - item.quantity;
       const newSold = currentBatch.soldPieces + item.quantity;
@@ -1351,9 +1770,10 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
           soldPieces: newSold,
           isClosed: newRemaining === 0,
         })
-        .where(eq(stockBatches.id, item.batchId));
+        .where(and(eq(stockBatches.id, item.batchId), eq(stockBatches.workspace, ws)));
 
       await db.insert(stockMovements).values({
+        workspace: ws,
         stockBatchId: item.batchId,
         movementType: 'WHOLESALE_OUT',
         quantity: -item.quantity,
@@ -1374,9 +1794,14 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // 9. WHOLESALE SHOPS
 // -------------------------------------------------------------
-apiRouter.get('/shops', async (_req: Request, res: Response) => {
+apiRouter.get('/shops', async (req: Request, res: Response) => {
   try {
-    const list = await db.select().from(shops).orderBy(asc(shops.shopName));
+    const ws = getRequestWorkspace(req);
+    const list = await db
+      .select()
+      .from(shops)
+      .where(eq(shops.workspace, ws))
+      .orderBy(asc(shops.shopName));
     const withSales = await Promise.all(
       list.map(async (sh) => {
         const stats = await db
@@ -1386,7 +1811,7 @@ apiRouter.get('/shops', async (_req: Request, res: Response) => {
             ordersCount: sql<number>`count(*)`,
           })
           .from(sales)
-          .where(eq(sales.shopId, sh.id));
+          .where(and(eq(sales.shopId, sh.id), eq(sales.workspace, ws)));
 
         return {
           ...sh,
@@ -1404,6 +1829,7 @@ apiRouter.get('/shops', async (_req: Request, res: Response) => {
 
 apiRouter.post('/shops', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const { shopName, ownerName, phone, address, notes } = req.body;
     if (!shopName?.trim()) {
       return res.status(400).json({ error: 'Shop name is required' });
@@ -1411,6 +1837,7 @@ apiRouter.post('/shops', async (req: Request, res: Response) => {
     const [created] = await db
       .insert(shops)
       .values({
+        workspace: ws,
         shopName: shopName.trim(),
         ownerName: ownerName?.trim() || null,
         phone: phone?.trim() || null,
@@ -1427,9 +1854,14 @@ apiRouter.post('/shops', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // 10. WORKERS & PAYMENTS
 // -------------------------------------------------------------
-apiRouter.get('/workers', async (_req: Request, res: Response) => {
+apiRouter.get('/workers', async (req: Request, res: Response) => {
   try {
-    const allWorkers = await db.select().from(workers).orderBy(asc(workers.name));
+    const ws = getRequestWorkspace(req);
+    const allWorkers = await db
+      .select()
+      .from(workers)
+      .where(eq(workers.workspace, ws))
+      .orderBy(asc(workers.name));
     const withTotals = await Promise.all(
       allWorkers.map(async (w) => {
         const pmt = await db
@@ -1438,7 +1870,7 @@ apiRouter.get('/workers', async (_req: Request, res: Response) => {
             paymentCount: sql<number>`count(*)`,
           })
           .from(workerPayments)
-          .where(eq(workerPayments.workerId, w.id));
+          .where(and(eq(workerPayments.workerId, w.id), eq(workerPayments.workspace, ws)));
 
         return {
           ...w,
@@ -1455,6 +1887,7 @@ apiRouter.get('/workers', async (_req: Request, res: Response) => {
 
 apiRouter.post('/workers', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const { name, phone, notes, isActive } = req.body;
     if (!name?.trim()) {
       return res.status(400).json({ error: 'Worker name is required' });
@@ -1462,6 +1895,7 @@ apiRouter.post('/workers', async (req: Request, res: Response) => {
     const [worker] = await db
       .insert(workers)
       .values({
+        workspace: ws,
         name: name.trim(),
         phone: phone?.trim() || null,
         notes: notes?.trim() || null,
@@ -1476,6 +1910,7 @@ apiRouter.post('/workers', async (req: Request, res: Response) => {
 
 apiRouter.put('/workers/:id', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const id = parseInt(req.params.id, 10);
     const { name, phone, notes, isActive } = req.body;
     const [updated] = await db
@@ -1486,8 +1921,11 @@ apiRouter.put('/workers/:id', async (req: Request, res: Response) => {
         notes: notes?.trim() || null,
         isActive: Boolean(isActive),
       })
-      .where(eq(workers.id, id))
+      .where(and(eq(workers.id, id), eq(workers.workspace, ws)))
       .returning();
+    if (!updated) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1496,11 +1934,20 @@ apiRouter.put('/workers/:id', async (req: Request, res: Response) => {
 
 apiRouter.get('/workers/:id/payments', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const workerId = parseInt(req.params.id, 10);
+    const [worker] = await db
+      .select()
+      .from(workers)
+      .where(and(eq(workers.id, workerId), eq(workers.workspace, ws)));
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
     const payments = await db
       .select()
       .from(workerPayments)
-      .where(eq(workerPayments.workerId, workerId))
+      .where(and(eq(workerPayments.workerId, workerId), eq(workerPayments.workspace, ws)))
       .orderBy(desc(workerPayments.paymentDate), desc(workerPayments.id));
 
     res.json(payments);
@@ -1511,6 +1958,7 @@ apiRouter.get('/workers/:id/payments', async (req: Request, res: Response) => {
 
 apiRouter.post('/workers/:id/payments', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const workerId = parseInt(req.params.id, 10);
     const { amount, paymentDate, paymentMethod, description } = req.body;
     const pmtAmount = Number(amount);
@@ -1519,9 +1967,18 @@ apiRouter.post('/workers/:id/payments', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Positive payment amount required' });
     }
 
+    const [worker] = await db
+      .select()
+      .from(workers)
+      .where(and(eq(workers.id, workerId), eq(workers.workspace, ws)));
+    if (!worker) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+
     const [pmt] = await db
       .insert(workerPayments)
       .values({
+        workspace: ws,
         workerId,
         amount: pmtAmount.toFixed(2),
         paymentDate: paymentDate || getPakistanDate(),
@@ -1536,8 +1993,17 @@ apiRouter.post('/workers/:id/payments', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/worker-payments', async (_req: Request, res: Response) => {
+apiRouter.get('/worker-payments', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
+    const { limit, skip, search, sortKey, sortDir, all } = parseServerPaginationParams(
+      req.query as Record<string, unknown>
+    );
+    const workerIdRaw = req.query.workerId ? String(req.query.workerId) : '';
+    const workerIdFilter = workerIdRaw && workerIdRaw !== 'ALL' ? parseInt(workerIdRaw, 10) : null;
+    const startDate = req.query.startDate ? String(req.query.startDate) : '';
+    const endDate = req.query.endDate ? String(req.query.endDate) : '';
+
     const payments = await db
       .select({
         id: workerPayments.id,
@@ -1551,9 +2017,41 @@ apiRouter.get('/worker-payments', async (_req: Request, res: Response) => {
       })
       .from(workerPayments)
       .innerJoin(workers, eq(workerPayments.workerId, workers.id))
+      .where(and(eq(workerPayments.workspace, ws), eq(workers.workspace, ws)))
       .orderBy(desc(workerPayments.paymentDate), desc(workerPayments.id));
 
-    res.json(payments);
+    let filtered = payments;
+    if (workerIdFilter && Number.isFinite(workerIdFilter)) {
+      filtered = filtered.filter((p) => p.workerId === workerIdFilter);
+    }
+    if (startDate) {
+      filtered = filtered.filter((p) => String(p.paymentDate) >= startDate);
+    }
+    if (endDate) {
+      filtered = filtered.filter((p) => String(p.paymentDate) <= endDate);
+    }
+    if (search) {
+      filtered = filtered.filter(
+        (p) =>
+          (p.workerName && p.workerName.toLowerCase().includes(search)) ||
+          (p.description && p.description.toLowerCase().includes(search)) ||
+          (p.paymentMethod && p.paymentMethod.toLowerCase().includes(search))
+      );
+    }
+
+    if (all) {
+      return res.json(filtered);
+    }
+
+    const paginated = sortAndPaginateRecords({
+      records: filtered,
+      limit,
+      skip,
+      sortKey: sortKey || 'paymentDate',
+      sortDir,
+    });
+
+    res.json(paginated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1562,13 +2060,58 @@ apiRouter.get('/worker-payments', async (_req: Request, res: Response) => {
 // -------------------------------------------------------------
 // 11. GENERAL BUSINESS EXPENSES
 // -------------------------------------------------------------
-apiRouter.get('/expenses', async (_req: Request, res: Response) => {
+apiRouter.get('/expenses', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
+    const { limit, skip, search, sortKey, sortDir, all } = parseServerPaginationParams(
+      req.query as Record<string, unknown>
+    );
+    const categoryFilter = req.query.category ? String(req.query.category) : '';
+    const methodFilter = req.query.paymentMethod ? String(req.query.paymentMethod) : '';
+    const startDate = req.query.startDate ? String(req.query.startDate) : '';
+    const endDate = req.query.endDate ? String(req.query.endDate) : '';
+
     const list = await db
       .select()
       .from(businessExpenses)
+      .where(eq(businessExpenses.workspace, ws))
       .orderBy(desc(businessExpenses.expenseDate), desc(businessExpenses.id));
-    res.json(list);
+
+    let filtered = list;
+    if (categoryFilter && categoryFilter !== 'ALL') {
+      filtered = filtered.filter((e) => e.category === categoryFilter);
+    }
+    if (methodFilter && methodFilter !== 'ALL') {
+      filtered = filtered.filter((e) => e.paymentMethod === methodFilter);
+    }
+    if (startDate) {
+      filtered = filtered.filter((e) => String(e.expenseDate) >= startDate);
+    }
+    if (endDate) {
+      filtered = filtered.filter((e) => String(e.expenseDate) <= endDate);
+    }
+    if (search) {
+      filtered = filtered.filter(
+        (e) =>
+          e.category.toLowerCase().includes(search) ||
+          (e.description && e.description.toLowerCase().includes(search)) ||
+          (e.paymentMethod && e.paymentMethod.toLowerCase().includes(search))
+      );
+    }
+
+    if (all) {
+      return res.json(filtered);
+    }
+
+    const paginated = sortAndPaginateRecords({
+      records: filtered,
+      limit,
+      skip,
+      sortKey: sortKey || 'expenseDate',
+      sortDir,
+    });
+
+    res.json(paginated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1576,6 +2119,7 @@ apiRouter.get('/expenses', async (_req: Request, res: Response) => {
 
 apiRouter.post('/expenses', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const { category, amount, expenseDate, paymentMethod, description } = req.body;
     const expAmount = Number(amount);
 
@@ -1586,6 +2130,7 @@ apiRouter.post('/expenses', async (req: Request, res: Response) => {
     const [created] = await db
       .insert(businessExpenses)
       .values({
+        workspace: ws,
         category,
         amount: expAmount.toFixed(2),
         expenseDate: expenseDate || getPakistanDate(),
@@ -1602,8 +2147,11 @@ apiRouter.post('/expenses', async (req: Request, res: Response) => {
 
 apiRouter.delete('/expenses/:id', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const id = parseInt(req.params.id, 10);
-    await db.delete(businessExpenses).where(eq(businessExpenses.id, id));
+    await db
+      .delete(businessExpenses)
+      .where(and(eq(businessExpenses.id, id), eq(businessExpenses.workspace, ws)));
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1615,6 +2163,7 @@ apiRouter.delete('/expenses/:id', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 apiRouter.get('/dashboard', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const period = (req.query.period as string) || 'today';
     const customStart = req.query.startDate as string;
     const customEnd = req.query.endDate as string;
@@ -1642,7 +2191,9 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
     const allSales = await db
       .select()
       .from(sales)
-      .where(and(gte(sales.saleDate, startDate), lte(sales.saleDate, endDate)));
+      .where(
+        and(eq(sales.workspace, ws), gte(sales.saleDate, startDate), lte(sales.saleDate, endDate))
+      );
 
     let periodRevenue = 0;
     let periodCogs = 0;
@@ -1671,7 +2222,13 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
     const expensesList = await db
       .select()
       .from(businessExpenses)
-      .where(and(gte(businessExpenses.expenseDate, startDate), lte(businessExpenses.expenseDate, endDate)));
+      .where(
+        and(
+          eq(businessExpenses.workspace, ws),
+          gte(businessExpenses.expenseDate, startDate),
+          lte(businessExpenses.expenseDate, endDate)
+        )
+      );
 
     const periodGeneralExpenses = expensesList.reduce((sum, e) => sum + Number(e.amount), 0);
 
@@ -1679,7 +2236,13 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
     const paymentsList = await db
       .select()
       .from(workerPayments)
-      .where(and(gte(workerPayments.paymentDate, startDate), lte(workerPayments.paymentDate, endDate)));
+      .where(
+        and(
+          eq(workerPayments.workspace, ws),
+          gte(workerPayments.paymentDate, startDate),
+          lte(workerPayments.paymentDate, endDate)
+        )
+      );
 
     const periodWorkerPayments = paymentsList.reduce((sum, p) => sum + Number(p.amount), 0);
 
@@ -1698,7 +2261,7 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
         totalBatches: sql<number>`count(*)`,
       })
       .from(stockBatches)
-      .where(eq(stockBatches.isClosed, false));
+      .where(and(eq(stockBatches.workspace, ws), eq(stockBatches.isClosed, false)));
 
     const totalAvailableStock = Number(activeBatches[0]?.totalRemaining || 0);
 
@@ -1710,7 +2273,13 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
         count: sql<number>`count(*)`,
       })
       .from(purchaseLoads)
-      .where(and(gte(purchaseLoads.purchaseDate, startDate), lte(purchaseLoads.purchaseDate, endDate)));
+      .where(
+        and(
+          eq(purchaseLoads.workspace, ws),
+          gte(purchaseLoads.purchaseDate, startDate),
+          lte(purchaseLoads.purchaseDate, endDate)
+        )
+      );
 
     const totalPurchaseAmount = Number(periodPurchases[0]?.totalAmount || 0);
     const totalPurchaseWeight = Number(periodPurchases[0]?.totalWeight || 0);
@@ -1721,18 +2290,27 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
         total: sql<string>`coalesce(sum(amount), '0')`,
       })
       .from(loadExpenses)
-      .where(and(gte(loadExpenses.expenseDate, startDate), lte(loadExpenses.expenseDate, endDate)));
+      .where(
+        and(
+          eq(loadExpenses.workspace, ws),
+          gte(loadExpenses.expenseDate, startDate),
+          lte(loadExpenses.expenseDate, endDate)
+        )
+      );
 
     const totalLoadExpenses = Number(periodLoadExpenses[0]?.total || 0);
 
     // 8. Dealer Total Outstanding Balance across all suppliers
-    const allSuppliers = await db.select().from(suppliers);
+    const allSuppliers = await db
+      .select()
+      .from(suppliers)
+      .where(eq(suppliers.workspace, ws));
     let totalDealerOutstanding = 0;
     for (const sup of allSuppliers) {
       const tx = await db
         .select()
         .from(dealerTransactions)
-        .where(eq(dealerTransactions.supplierId, sup.id))
+        .where(and(eq(dealerTransactions.supplierId, sup.id), eq(dealerTransactions.workspace, ws)))
         .orderBy(desc(dealerTransactions.id))
         .limit(1);
       const bal = tx.length > 0 ? Number(tx[0].balanceAfter) : Number(sup.openingBalance);
@@ -1754,6 +2332,7 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
       })
       .from(sales)
       .leftJoin(shops, eq(sales.shopId, shops.id))
+      .where(eq(sales.workspace, ws))
       .orderBy(desc(sales.saleDate), desc(sales.id))
       .limit(5);
 
@@ -1769,12 +2348,14 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
       })
       .from(purchaseLoads)
       .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
+      .where(and(eq(purchaseLoads.workspace, ws), eq(suppliers.workspace, ws)))
       .orderBy(desc(purchaseLoads.purchaseDate), desc(purchaseLoads.id))
       .limit(5);
 
     const recentExpenses = await db
       .select()
       .from(businessExpenses)
+      .where(eq(businessExpenses.workspace, ws))
       .orderBy(desc(businessExpenses.expenseDate), desc(businessExpenses.id))
       .limit(5);
 
@@ -1788,7 +2369,13 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
         receivingDate: stockBatches.receivingDate,
       })
       .from(stockBatches)
-      .where(and(eq(stockBatches.isClosed, false), lte(stockBatches.remainingPieces, 100)))
+      .where(
+        and(
+          eq(stockBatches.workspace, ws),
+          eq(stockBatches.isClosed, false),
+          lte(stockBatches.remainingPieces, 100)
+        )
+      )
       .orderBy(asc(stockBatches.remainingPieces));
 
     // Daily breakdown for charts (Last 7 days or selected range)
@@ -1814,21 +2401,21 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
           pieces: sql<string>`coalesce(sum(total_pieces), '0')`,
         })
         .from(sales)
-        .where(eq(sales.saleDate, dayStr));
+        .where(and(eq(sales.workspace, ws), eq(sales.saleDate, dayStr)));
 
       const dayGenExp = await db
         .select({
           total: sql<string>`coalesce(sum(amount), '0')`,
         })
         .from(businessExpenses)
-        .where(eq(businessExpenses.expenseDate, dayStr));
+        .where(and(eq(businessExpenses.workspace, ws), eq(businessExpenses.expenseDate, dayStr)));
 
       const dayWkrExp = await db
         .select({
           total: sql<string>`coalesce(sum(amount), '0')`,
         })
         .from(workerPayments)
-        .where(eq(workerPayments.paymentDate, dayStr));
+        .where(and(eq(workerPayments.workspace, ws), eq(workerPayments.paymentDate, dayStr)));
 
       const rev = Number(daySales[0]?.revenue || 0);
       const cogs = Number(daySales[0]?.cogs || 0);
@@ -1888,6 +2475,7 @@ apiRouter.get('/dashboard', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 apiRouter.get('/reports', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
     const startDate = (req.query.startDate as string) || getPakistanDate();
     const endDate = (req.query.endDate as string) || getPakistanDate();
 
@@ -1908,7 +2496,9 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
       })
       .from(sales)
       .leftJoin(shops, eq(sales.shopId, shops.id))
-      .where(and(gte(sales.saleDate, startDate), lte(sales.saleDate, endDate)))
+      .where(
+        and(eq(sales.workspace, ws), gte(sales.saleDate, startDate), lte(sales.saleDate, endDate))
+      )
       .orderBy(desc(sales.saleDate), desc(sales.id));
 
     let ownShopRev = 0;
@@ -1934,7 +2524,13 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
     const expensesList = await db
       .select()
       .from(businessExpenses)
-      .where(and(gte(businessExpenses.expenseDate, startDate), lte(businessExpenses.expenseDate, endDate)))
+      .where(
+        and(
+          eq(businessExpenses.workspace, ws),
+          gte(businessExpenses.expenseDate, startDate),
+          lte(businessExpenses.expenseDate, endDate)
+        )
+      )
       .orderBy(desc(businessExpenses.expenseDate));
 
     const generalExpTotal = expensesList.reduce((sum, e) => sum + Number(e.amount), 0);
@@ -1957,7 +2553,14 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
       })
       .from(workerPayments)
       .innerJoin(workers, eq(workerPayments.workerId, workers.id))
-      .where(and(gte(workerPayments.paymentDate, startDate), lte(workerPayments.paymentDate, endDate)))
+      .where(
+        and(
+          eq(workerPayments.workspace, ws),
+          eq(workers.workspace, ws),
+          gte(workerPayments.paymentDate, startDate),
+          lte(workerPayments.paymentDate, endDate)
+        )
+      )
       .orderBy(desc(workerPayments.paymentDate));
 
     const workerExpTotal = workerPaymentsList.reduce((sum, p) => sum + Number(p.amount), 0);
@@ -1975,7 +2578,14 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
       })
       .from(purchaseLoads)
       .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
-      .where(and(gte(purchaseLoads.purchaseDate, startDate), lte(purchaseLoads.purchaseDate, endDate)))
+      .where(
+        and(
+          eq(purchaseLoads.workspace, ws),
+          eq(suppliers.workspace, ws),
+          gte(purchaseLoads.purchaseDate, startDate),
+          lte(purchaseLoads.purchaseDate, endDate)
+        )
+      )
       .orderBy(desc(purchaseLoads.purchaseDate));
 
     const totalPurchasesAmount = purchasesList.reduce((sum, p) => sum + Number(p.purchaseAmount), 0);
@@ -1997,7 +2607,15 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
       .from(loadExpenses)
       .innerJoin(purchaseLoads, eq(loadExpenses.purchaseLoadId, purchaseLoads.id))
       .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
-      .where(and(gte(loadExpenses.expenseDate, startDate), lte(loadExpenses.expenseDate, endDate)))
+      .where(
+        and(
+          eq(loadExpenses.workspace, ws),
+          eq(purchaseLoads.workspace, ws),
+          eq(suppliers.workspace, ws),
+          gte(loadExpenses.expenseDate, startDate),
+          lte(loadExpenses.expenseDate, endDate)
+        )
+      )
       .orderBy(desc(loadExpenses.expenseDate), desc(loadExpenses.id));
 
     const totalLoadExpAmount = loadExpList.reduce((sum, e) => sum + Number(e.amount), 0);
@@ -2023,6 +2641,8 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
       .innerJoin(suppliers, eq(dealerTransactions.supplierId, suppliers.id))
       .where(
         and(
+          eq(dealerTransactions.workspace, ws),
+          eq(suppliers.workspace, ws),
           gte(dealerTransactions.transactionDate, startDate),
           lte(dealerTransactions.transactionDate, endDate),
           eq(dealerTransactions.transactionType, 'PAYMENT_CREDIT')
@@ -2034,7 +2654,7 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
     const activeBatchesList = await db
       .select()
       .from(stockBatches)
-      .where(eq(stockBatches.isClosed, false));
+      .where(and(eq(stockBatches.workspace, ws), eq(stockBatches.isClosed, false)));
 
     const stockValuation = {
       totalPieces: activeBatchesList.reduce((s, b) => s + b.remainingPieces, 0),
@@ -2083,29 +2703,359 @@ apiRouter.get('/reports', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// 14. SEED DATA HELPER & UNIFIED BOOTSTRAP
+// 14. WORKSPACE CLEAR, DYNAMIC 6-MONTH DEMO SEED, RESET & BOOTSTRAP
 // -------------------------------------------------------------
-async function runSeed(force = false): Promise<{ seeded: boolean; message: string }> {
+async function clearWorkspaceData(ws: WorkspaceMode, includeSettings = true): Promise<void> {
+  // Delete leaf child tables first in parallel, then parents tier-by-tier
+  await Promise.all([
+    db.delete(saleItems).where(eq(saleItems.workspace, ws)),
+    db.delete(stockMovements).where(eq(stockMovements.workspace, ws)),
+    db.delete(loadExpenses).where(eq(loadExpenses.workspace, ws)),
+    db.delete(dealerTransactions).where(eq(dealerTransactions.workspace, ws)),
+    db.delete(workerPayments).where(eq(workerPayments.workspace, ws)),
+    db.delete(businessExpenses).where(eq(businessExpenses.workspace, ws)),
+  ]);
+
+  await Promise.all([
+    db.delete(sales).where(eq(sales.workspace, ws)),
+    db.delete(stockBatches).where(eq(stockBatches.workspace, ws)),
+    db.delete(workers).where(eq(workers.workspace, ws)),
+  ]);
+
+  await Promise.all([
+    db.delete(purchaseLoads).where(eq(purchaseLoads.workspace, ws)),
+    db.delete(shops).where(eq(shops.workspace, ws)),
+    db.delete(vehicles).where(eq(vehicles.workspace, ws)),
+  ]);
+
+  await Promise.all([
+    db.delete(suppliers).where(eq(suppliers.workspace, ws)),
+    includeSettings ? db.delete(settings).where(eq(settings.workspace, ws)) : Promise.resolve(),
+  ]);
+}
+
+let activeDemoSeedPromise: Promise<{ seeded: boolean; message: string }> | null = null;
+
+async function seedSixMonthDemoWorkspace(): Promise<{ seeded: boolean; message: string }> {
+  if (activeDemoSeedPromise) {
+    return activeDemoSeedPromise;
+  }
+
+  activeDemoSeedPromise = (async () => {
+    const ws: WorkspaceMode = 'demo';
+    await clearWorkspaceData(ws, true);
+
+    const dataset = buildSixMonthDemoDataset(new Date());
+
+    // 1. Bulk insert top-level independent entities in parallel
+    const [insertedSuppliers, , insertedShops, insertedWorkers] = await Promise.all([
+      dataset.suppliers.length > 0
+        ? db
+            .insert(suppliers)
+            .values(
+              dataset.suppliers.map((s) => ({
+                workspace: ws,
+                name: s.name,
+                phone: s.phone,
+                address: s.address,
+                openingBalance: s.openingBalance,
+                notes: s.notes,
+              }))
+            )
+            .returning()
+        : Promise.resolve([]),
+      dataset.vehicles.length > 0
+        ? db.insert(vehicles).values(
+            dataset.vehicles.map((v) => ({
+              workspace: ws,
+              vehicleNumber: v.vehicleNumber,
+              driverName: v.driverName,
+              driverPhone: v.driverPhone,
+              notes: v.notes,
+            }))
+          )
+        : Promise.resolve([]),
+      dataset.shops.length > 0
+        ? db
+            .insert(shops)
+            .values(
+              dataset.shops.map((sh) => ({
+                workspace: ws,
+                shopName: sh.shopName,
+                ownerName: sh.ownerName,
+                phone: sh.phone,
+                address: sh.address,
+                notes: sh.notes,
+              }))
+            )
+            .returning()
+        : Promise.resolve([]),
+      dataset.workers.length > 0
+        ? db
+            .insert(workers)
+            .values(
+              dataset.workers.map((w) => ({
+                workspace: ws,
+                name: w.name,
+                phone: w.phone,
+                notes: w.notes,
+                isActive: w.isActive,
+              }))
+            )
+            .returning()
+        : Promise.resolve([]),
+    ]);
+
+    const supplierIdByKey = new Map<string, number>();
+    dataset.suppliers.forEach((s, idx) => {
+      const match = insertedSuppliers[idx] || insertedSuppliers.find((r) => r.name === s.name);
+      if (match) supplierIdByKey.set(s.key, match.id);
+    });
+
+    const shopIdByKey = new Map<string, number>();
+    dataset.shops.forEach((sh, idx) => {
+      const match = insertedShops[idx] || insertedShops.find((r) => r.shopName === sh.shopName);
+      if (match) shopIdByKey.set(sh.key, match.id);
+    });
+
+    const workerIdByKey = new Map<string, number>();
+    dataset.workers.forEach((w, idx) => {
+      const match = insertedWorkers[idx] || insertedWorkers.find((r) => r.name === w.name);
+      if (match) workerIdByKey.set(w.key, match.id);
+    });
+
+    // 2. Bulk insert purchase loads
+    const loadIdByKey = new Map<string, number>();
+    const insertedLoads =
+      dataset.purchaseLoads.length > 0
+        ? await db
+            .insert(purchaseLoads)
+            .values(
+              dataset.purchaseLoads.map((load) => ({
+                workspace: ws,
+                loadNumber: load.loadNumber,
+                supplierId: supplierIdByKey.get(load.supplierKey)!,
+                purchaseDate: load.purchaseDate,
+                totalWeightKg: load.totalWeightKg,
+                purchaseAmount: load.purchaseAmount,
+                vehicleNumber: load.vehicleNumber,
+                driverName: load.driverName,
+                status: load.status,
+                notes: load.notes,
+              }))
+            )
+            .returning()
+        : [];
+
+    dataset.purchaseLoads.forEach((load, idx) => {
+      const match =
+        insertedLoads[idx] || insertedLoads.find((r) => r.loadNumber === load.loadNumber);
+      if (match) loadIdByKey.set(load.key, match.id);
+    });
+
+    // 3. Bulk insert load expenses & stock batches in parallel
+    const allLoadExpenseRows = dataset.purchaseLoads.flatMap((load) => {
+      const loadId = loadIdByKey.get(load.key)!;
+      return load.loadExpenses.map((exp) => ({
+        workspace: ws,
+        purchaseLoadId: loadId,
+        category: exp.category,
+        amount: exp.amount,
+        expenseDate: exp.expenseDate,
+        description: exp.description,
+      }));
+    });
+
+    const batchEntries = dataset.purchaseLoads
+      .filter((load) => Boolean(load.batch))
+      .map((load) => ({
+        loadKey: load.key,
+        batch: load.batch!,
+      }));
+
+    const [, insertedBatches] = await Promise.all([
+      allLoadExpenseRows.length > 0
+        ? db.insert(loadExpenses).values(allLoadExpenseRows)
+        : Promise.resolve([]),
+      batchEntries.length > 0
+        ? db
+            .insert(stockBatches)
+            .values(
+              batchEntries.map(({ loadKey, batch: b }) => ({
+                workspace: ws,
+                batchNumber: b.batchNumber,
+                purchaseLoadId: loadIdByKey.get(loadKey)!,
+                receivingDate: b.receivingDate,
+                receivedPieces: b.receivedPieces,
+                deadPieces: b.deadPieces,
+                damagedPieces: b.damagedPieces,
+                originalSaleablePieces: b.originalSaleablePieces,
+                soldPieces: b.soldPieces,
+                remainingPieces: b.remainingPieces,
+                purchaseAmount: b.purchaseAmount,
+                totalLoadExpenses: b.totalLoadExpenses,
+                totalLandedCost: b.totalLandedCost,
+                costPerPiece: b.costPerPiece,
+                isClosed: b.isClosed,
+                notes: b.notes,
+              }))
+            )
+            .returning()
+        : Promise.resolve([]),
+    ]);
+
+    const batchIdByKey = new Map<string, number>();
+    batchEntries.forEach(({ batch: b }, idx) => {
+      const match =
+        insertedBatches[idx] || insertedBatches.find((r) => r.batchNumber === b.batchNumber);
+      if (match) batchIdByKey.set(b.key, match.id);
+    });
+
+    // 4. Bulk insert dealer transactions & sales in parallel
+    const [, insertedSales] = await Promise.all([
+      dataset.dealerTransactions.length > 0
+        ? db.insert(dealerTransactions).values(
+            dataset.dealerTransactions.map((tx) => ({
+              workspace: ws,
+              supplierId: supplierIdByKey.get(tx.supplierKey)!,
+              transactionDate: tx.transactionDate,
+              transactionType: tx.transactionType,
+              debitAmount: tx.debitAmount,
+              creditAmount: tx.creditAmount,
+              balanceAfter: tx.balanceAfter,
+              referenceType: tx.referenceType,
+              referenceId: tx.loadKey ? loadIdByKey.get(tx.loadKey) ?? null : null,
+              paymentMethod: tx.paymentMethod ?? null,
+              notes: tx.notes,
+            }))
+          )
+        : Promise.resolve([]),
+      dataset.sales.length > 0
+        ? db
+            .insert(sales)
+            .values(
+              dataset.sales.map((s) => ({
+                workspace: ws,
+                invoiceNumber: s.invoiceNumber,
+                saleType: s.saleType,
+                saleDate: s.saleDate,
+                shopId: s.shopKey ? shopIdByKey.get(s.shopKey) ?? null : null,
+                totalPieces: s.totalPieces,
+                totalAmount: s.totalAmount,
+                totalCost: s.totalCost,
+                totalProfit: s.totalProfit,
+                sellingPricePerPiece: s.sellingPricePerPiece,
+                costPerPiece: s.costPerPiece,
+                profitPerPiece: s.profitPerPiece,
+                notes: s.notes,
+              }))
+            )
+            .returning()
+        : Promise.resolve([]),
+    ]);
+
+    const saleIdByKey = new Map<string, number>();
+    dataset.sales.forEach((s, idx) => {
+      const match =
+        insertedSales[idx] || insertedSales.find((r) => r.invoiceNumber === s.invoiceNumber);
+      if (match) saleIdByKey.set(s.key, match.id);
+    });
+
+    // 5. Bulk insert sale items, stock movements, worker payments, general expenses, and settings in parallel
+    const allSaleItems = dataset.sales.flatMap((s) => {
+      const saleId = saleIdByKey.get(s.key)!;
+      return s.items.map((item) => ({
+        workspace: ws,
+        saleId,
+        stockBatchId: batchIdByKey.get(item.batchKey)!,
+        quantity: item.quantity,
+        unitCost: item.unitCost,
+        totalCost: item.totalCost,
+      }));
+    });
+
+    const settingsEntries = Object.entries(dataset.settings);
+
+    await Promise.all([
+      allSaleItems.length > 0 ? db.insert(saleItems).values(allSaleItems) : Promise.resolve([]),
+      dataset.stockMovements.length > 0
+        ? db.insert(stockMovements).values(
+            dataset.stockMovements.map((m) => ({
+              workspace: ws,
+              stockBatchId: batchIdByKey.get(m.batchKey)!,
+              movementType: m.movementType,
+              quantity: m.quantity,
+              balanceAfter: m.balanceAfter,
+              unitCost: m.unitCost,
+              referenceType: m.referenceType,
+              referenceId: m.loadKey
+                ? loadIdByKey.get(m.loadKey) ?? null
+                : m.saleKey
+                ? saleIdByKey.get(m.saleKey) ?? null
+                : null,
+              notes: m.notes,
+            }))
+          )
+        : Promise.resolve([]),
+      dataset.workerPayments.length > 0
+        ? db.insert(workerPayments).values(
+            dataset.workerPayments.map((wp) => ({
+              workspace: ws,
+              workerId: workerIdByKey.get(wp.workerKey)!,
+              amount: wp.amount,
+              paymentDate: wp.paymentDate,
+              paymentMethod: wp.paymentMethod,
+              description: wp.description,
+            }))
+          )
+        : Promise.resolve([]),
+      dataset.businessExpenses.length > 0
+        ? db.insert(businessExpenses).values(
+            dataset.businessExpenses.map((exp) => ({
+              workspace: ws,
+              category: exp.category,
+              amount: exp.amount,
+              expenseDate: exp.expenseDate,
+              paymentMethod: exp.paymentMethod,
+              description: exp.description,
+            }))
+          )
+        : Promise.resolve([]),
+      settingsEntries.length > 0
+        ? db.insert(settings).values(
+            settingsEntries.map(([key, value]) => ({
+              workspace: ws,
+              key,
+              value,
+              updatedAt: new Date(),
+            }))
+          )
+        : Promise.resolve([]),
+    ]);
+
+    return {
+      seeded: true,
+      message: 'Demo data loaded with 6 months of synced poultry shop records.',
+    };
+  })().finally(() => {
+    activeDemoSeedPromise = null;
+  });
+
+  return activeDemoSeedPromise;
+}
+
+async function runRealSeed(force = false): Promise<{ seeded: boolean; message: string }> {
+  const ws: WorkspaceMode = 'real';
   if (!force) {
-    const supCount = await db.select({ count: sql<number>`count(*)` }).from(suppliers);
+    const supCount = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(suppliers)
+      .where(eq(suppliers.workspace, ws));
     if (Number(supCount[0]?.count || 0) > 0) {
       return { seeded: false, message: 'Database already has data. Skipping seed.' };
     }
   } else {
-    // Cleanly reset all tables in dependency order
-    await db.delete(saleItems);
-    await db.delete(sales);
-    await db.delete(stockMovements);
-    await db.delete(stockBatches);
-    await db.delete(loadExpenses);
-    await db.delete(dealerTransactions);
-    await db.delete(purchaseLoads);
-    await db.delete(workerPayments);
-    await db.delete(workers);
-    await db.delete(businessExpenses);
-    await db.delete(shops);
-    await db.delete(vehicles);
-    await db.delete(suppliers);
+    await clearWorkspaceData(ws, false);
   }
 
   const now = new Date();
@@ -2113,10 +3063,10 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   const date3DaysAgo = shiftPakistanDate(now, -3);
   const dateYesterday = shiftPakistanDate(now, -1);
 
-  // 1. Create Suppliers in Punjab
   const [sup1] = await db
     .insert(suppliers)
     .values({
+      workspace: ws,
       name: 'Chaudhry Poultry Farms',
       phone: '0300-8451234',
       address: 'Kamoke G.T. Road, Gujranwala',
@@ -2128,6 +3078,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   const [sup2] = await db
     .insert(suppliers)
     .values({
+      workspace: ws,
       name: 'Mian Brothers Hatchery',
       phone: '0321-7654321',
       address: 'Sheikhupura Bypass',
@@ -2138,6 +3089,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
 
   await db.insert(dealerTransactions).values([
     {
+      workspace: ws,
       supplierId: sup1.id,
       transactionDate: date3DaysAgo,
       transactionType: 'PURCHASE_DEBIT',
@@ -2148,6 +3100,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
       notes: 'Previous balance carried forward',
     },
     {
+      workspace: ws,
       supplierId: sup2.id,
       transactionDate: date3DaysAgo,
       transactionType: 'PURCHASE_DEBIT',
@@ -2159,15 +3112,16 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     },
   ]);
 
-  // 2. Vehicles
   await db.insert(vehicles).values([
     {
+      workspace: ws,
       vehicleNumber: 'LES-4921',
       driverName: 'Muhammad Aslam',
       driverPhone: '0312-4411223',
       notes: 'Mazda Titan 14ft Open Cage',
     },
     {
+      workspace: ws,
       vehicleNumber: 'GA-8119',
       driverName: 'Rashid Mehmood',
       driverPhone: '0345-9988776',
@@ -2175,10 +3129,10 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     },
   ]);
 
-  // 3. Wholesale Shops
   const [shop1] = await db
     .insert(shops)
     .values({
+      workspace: ws,
       shopName: 'Bismillah Chicken Center',
       ownerName: 'Tariq Butt',
       phone: '0333-4123890',
@@ -2189,6 +3143,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   const [shop2] = await db
     .insert(shops)
     .values({
+      workspace: ws,
       shopName: 'Madina Meat & Poultry Shop',
       ownerName: 'Haji Farooq',
       phone: '0301-5544332',
@@ -2196,10 +3151,10 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     })
     .returning();
 
-  // 4. Workers
   const [worker1] = await db
     .insert(workers)
     .values({
+      workspace: ws,
       name: 'Akram Masih',
       phone: '0322-1122334',
       notes: 'Head cutter and shop supervisor',
@@ -2210,6 +3165,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   const [worker2] = await db
     .insert(workers)
     .values({
+      workspace: ws,
       name: 'Zahid Khan',
       phone: '0315-7766554',
       notes: 'Loader & transport helper',
@@ -2217,10 +3173,10 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     })
     .returning();
 
-  // 5. Purchase Load 1 (3 days ago from Chaudhry Poultry - RECEIVED)
   const [load1] = await db
     .insert(purchaseLoads)
     .values({
+      workspace: ws,
       loadNumber: `LOAD-${date3DaysAgo.replace(/-/g, '')}-001`,
       supplierId: sup1.id,
       purchaseDate: date3DaysAgo,
@@ -2234,6 +3190,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     .returning();
 
   await db.insert(dealerTransactions).values({
+    workspace: ws,
     supplierId: sup1.id,
     transactionDate: date3DaysAgo,
     transactionType: 'PURCHASE_DEBIT',
@@ -2247,6 +3204,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
 
   await db.insert(loadExpenses).values([
     {
+      workspace: ws,
       purchaseLoadId: load1.id,
       category: 'Fuel',
       amount: '22000.00',
@@ -2254,6 +3212,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
       description: 'Diesel Gujranwala to Lahore',
     },
     {
+      workspace: ws,
       purchaseLoadId: load1.id,
       category: 'Loading',
       amount: '6000.00',
@@ -2261,6 +3220,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
       description: 'Farm loaders fee',
     },
     {
+      workspace: ws,
       purchaseLoadId: load1.id,
       category: 'Driver Expense',
       amount: '4000.00',
@@ -2272,6 +3232,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   const [batch1] = await db
     .insert(stockBatches)
     .values({
+      workspace: ws,
       batchNumber: `BATCH-${load1.loadNumber}`,
       purchaseLoadId: load1.id,
       receivingDate: date3DaysAgo,
@@ -2291,6 +3252,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     .returning();
 
   await db.insert(stockMovements).values({
+    workspace: ws,
     stockBatchId: batch1.id,
     movementType: 'STOCK_IN',
     quantity: 880,
@@ -2301,10 +3263,10 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     notes: 'Received 900 birds (12 dead, 8 damaged)',
   });
 
-  // 6. Purchase Load 2 (Yesterday from Mian Brothers - RECEIVED)
   const [load2] = await db
     .insert(purchaseLoads)
     .values({
+      workspace: ws,
       loadNumber: `LOAD-${dateYesterday.replace(/-/g, '')}-001`,
       supplierId: sup2.id,
       purchaseDate: dateYesterday,
@@ -2318,6 +3280,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     .returning();
 
   await db.insert(dealerTransactions).values({
+    workspace: ws,
     supplierId: sup2.id,
     transactionDate: dateYesterday,
     transactionType: 'PURCHASE_DEBIT',
@@ -2331,6 +3294,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
 
   await db.insert(loadExpenses).values([
     {
+      workspace: ws,
       purchaseLoadId: load2.id,
       category: 'Transportation',
       amount: '18000.00',
@@ -2338,6 +3302,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
       description: 'Truck fare',
     },
     {
+      workspace: ws,
       purchaseLoadId: load2.id,
       category: 'Unloading',
       amount: '4000.00',
@@ -2349,6 +3314,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   const [batch2] = await db
     .insert(stockBatches)
     .values({
+      workspace: ws,
       batchNumber: `BATCH-${load2.loadNumber}`,
       purchaseLoadId: load2.id,
       receivingDate: dateYesterday,
@@ -2368,6 +3334,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     .returning();
 
   await db.insert(stockMovements).values({
+    workspace: ws,
     stockBatchId: batch2.id,
     movementType: 'STOCK_IN',
     quantity: 590,
@@ -2378,10 +3345,10 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     notes: 'Received 600 birds (6 dead, 4 damaged)',
   });
 
-  // 6b. Purchase Load 3 (Today - PENDING_RECEIVING so user can test counting/receiving!)
   const [load3] = await db
     .insert(purchaseLoads)
     .values({
+      workspace: ws,
       loadNumber: `LOAD-${todayStr.replace(/-/g, '')}-001`,
       supplierId: sup1.id,
       purchaseDate: todayStr,
@@ -2395,6 +3362,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     .returning();
 
   await db.insert(dealerTransactions).values({
+    workspace: ws,
     supplierId: sup1.id,
     transactionDate: todayStr,
     transactionType: 'PURCHASE_DEBIT',
@@ -2408,6 +3376,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
 
   await db.insert(loadExpenses).values([
     {
+      workspace: ws,
       purchaseLoadId: load3.id,
       category: 'Fuel',
       amount: '15000.00',
@@ -2416,10 +3385,10 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     },
   ]);
 
-  // 7. Synced Sales + Stock Movements
   const [sale1] = await db
     .insert(sales)
     .values({
+      workspace: ws,
       invoiceNumber: `INV-${dateYesterday.replace(/-/g, '')}-0001`,
       saleType: 'OWN_SHOP',
       saleDate: dateYesterday,
@@ -2435,6 +3404,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     .returning();
 
   await db.insert(saleItems).values({
+    workspace: ws,
     saleId: sale1.id,
     stockBatchId: batch1.id,
     quantity: 300,
@@ -2443,6 +3413,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   });
 
   await db.insert(stockMovements).values({
+    workspace: ws,
     stockBatchId: batch1.id,
     movementType: 'SALE_OUT',
     quantity: -300,
@@ -2456,6 +3427,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   const [sale2] = await db
     .insert(sales)
     .values({
+      workspace: ws,
       invoiceNumber: `WHL-${dateYesterday.replace(/-/g, '')}-0002`,
       saleType: 'WHOLESALE',
       saleDate: dateYesterday,
@@ -2472,6 +3444,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     .returning();
 
   await db.insert(saleItems).values({
+    workspace: ws,
     saleId: sale2.id,
     stockBatchId: batch1.id,
     quantity: 150,
@@ -2480,6 +3453,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   });
 
   await db.insert(stockMovements).values({
+    workspace: ws,
     stockBatchId: batch1.id,
     movementType: 'WHOLESALE_OUT',
     quantity: -150,
@@ -2493,6 +3467,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   const [sale3] = await db
     .insert(sales)
     .values({
+      workspace: ws,
       invoiceNumber: `INV-${todayStr.replace(/-/g, '')}-0003`,
       saleType: 'OWN_SHOP',
       saleDate: todayStr,
@@ -2508,6 +3483,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     .returning();
 
   await db.insert(saleItems).values({
+    workspace: ws,
     saleId: sale3.id,
     stockBatchId: batch1.id,
     quantity: 100,
@@ -2516,6 +3492,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   });
 
   await db.insert(stockMovements).values({
+    workspace: ws,
     stockBatchId: batch1.id,
     movementType: 'SALE_OUT',
     quantity: -100,
@@ -2529,6 +3506,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   const [sale4] = await db
     .insert(sales)
     .values({
+      workspace: ws,
       invoiceNumber: `WHL-${todayStr.replace(/-/g, '')}-0004`,
       saleType: 'WHOLESALE',
       saleDate: todayStr,
@@ -2545,6 +3523,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     .returning();
 
   await db.insert(saleItems).values({
+    workspace: ws,
     saleId: sale4.id,
     stockBatchId: batch2.id,
     quantity: 100,
@@ -2553,6 +3532,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
   });
 
   await db.insert(stockMovements).values({
+    workspace: ws,
     stockBatchId: batch2.id,
     movementType: 'WHOLESALE_OUT',
     quantity: -100,
@@ -2563,8 +3543,8 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     notes: `Wholesale delivery ${sale4.invoiceNumber} to Madina Meat & Poultry Shop`,
   });
 
-  // 8. Dealer Payment to Chaudhry Poultry (Paid PKR 500,000 -> Balance = 2,262,500 - 500,000 = 1,762,500)
   await db.insert(dealerTransactions).values({
+    workspace: ws,
     supplierId: sup1.id,
     transactionDate: todayStr,
     transactionType: 'PAYMENT_CREDIT',
@@ -2576,9 +3556,9 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     notes: 'HBL Online transfer partial payment',
   });
 
-  // 9. General Business Expenses
   await db.insert(businessExpenses).values([
     {
+      workspace: ws,
       category: 'Electricity',
       amount: '18500.00',
       expenseDate: dateYesterday,
@@ -2586,6 +3566,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
       description: 'LESCO commercial shop electricity bill',
     },
     {
+      workspace: ws,
       category: 'Food',
       amount: '1500.00',
       expenseDate: todayStr,
@@ -2593,6 +3574,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
       description: 'Staff lunch',
     },
     {
+      workspace: ws,
       category: 'Tea',
       amount: '800.00',
       expenseDate: todayStr,
@@ -2600,6 +3582,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
       description: 'Daily tea and refreshments',
     },
     {
+      workspace: ws,
       category: 'Cleaning',
       amount: '1200.00',
       expenseDate: todayStr,
@@ -2608,9 +3591,9 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     },
   ]);
 
-  // 10. Worker Payments
   await db.insert(workerPayments).values([
     {
+      workspace: ws,
       workerId: worker1.id,
       amount: '5000.00',
       paymentDate: todayStr,
@@ -2618,6 +3601,7 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
       description: 'Weekly cash wage payment',
     },
     {
+      workspace: ws,
       workerId: worker2.id,
       amount: '3500.00',
       paymentDate: todayStr,
@@ -2626,13 +3610,18 @@ async function runSeed(force = false): Promise<{ seeded: boolean; message: strin
     },
   ]);
 
-  return { seeded: true, message: 'Demo business data loaded and synced across all modules' };
+  return { seeded: true, message: 'Sample business data loaded and synced across all modules' };
 }
 
 apiRouter.post('/seed', async (req: Request, res: Response) => {
   try {
+    const ws = getRequestWorkspace(req);
+    if (ws === 'demo') {
+      const result = await seedSixMonthDemoWorkspace();
+      return res.json({ success: true, ...result });
+    }
     const force = Boolean(req.body?.force || req.query?.force === 'true');
-    const result = await runSeed(force);
+    const result = await runRealSeed(force);
     res.json({ success: true, ...result });
   } catch (error: any) {
     console.error('Seed failed:', error);
@@ -2640,11 +3629,47 @@ apiRouter.post('/seed', async (req: Request, res: Response) => {
   }
 });
 
-// Unified Bootstrap Endpoint for Zustand Store
-apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
+// Mode-aware Workspace Reset
+apiRouter.post('/reset', async (req: Request, res: Response) => {
   try {
-    // Auto-seed once on first launch if database is empty
-    await runSeed(false);
+    const ws = getRequestWorkspace(req);
+    if (ws === 'demo') {
+      await seedSixMonthDemoWorkspace();
+      return res.json({
+        success: true,
+        mode: 'demo',
+        message: 'Demo account reset with fresh 6-month dynamic data. Real data is untouched.',
+      });
+    }
+
+    await clearWorkspaceData('real', true);
+    return res.json({
+      success: true,
+      mode: 'real',
+      message: 'All real business records have been permanently cleared.',
+    });
+  } catch (error: any) {
+    console.error('Reset workspace failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Unified Bootstrap Endpoint for Zustand Store
+apiRouter.get('/bootstrap', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+
+    // Only auto-seed when the demo sandbox is empty; NEVER auto-seed real workspace
+    // so resetting real data keeps the account cleanly empty.
+    if (ws === 'demo') {
+      const demoSupCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(suppliers)
+        .where(eq(suppliers.workspace, 'demo'));
+      if (Number(demoSupCount[0]?.count || 0) === 0) {
+        await seedSixMonthDemoWorkspace();
+      }
+    }
 
     const [
       allSuppliers,
@@ -2659,8 +3684,13 @@ apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
       allExpenses,
       allVehicles,
       allSettings,
+      allLoadExps,
     ] = await Promise.all([
-      db.select().from(suppliers).orderBy(asc(suppliers.name)),
+      db
+        .select()
+        .from(suppliers)
+        .where(eq(suppliers.workspace, ws))
+        .orderBy(asc(suppliers.name)),
       db
         .select({
           id: purchaseLoads.id,
@@ -2678,6 +3708,7 @@ apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
         })
         .from(purchaseLoads)
         .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
+        .where(and(eq(purchaseLoads.workspace, ws), eq(suppliers.workspace, ws)))
         .orderBy(desc(purchaseLoads.purchaseDate), desc(purchaseLoads.id)),
       db
         .select({
@@ -2704,6 +3735,13 @@ apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
         .from(stockBatches)
         .innerJoin(purchaseLoads, eq(stockBatches.purchaseLoadId, purchaseLoads.id))
         .innerJoin(suppliers, eq(purchaseLoads.supplierId, suppliers.id))
+        .where(
+          and(
+            eq(stockBatches.workspace, ws),
+            eq(purchaseLoads.workspace, ws),
+            eq(suppliers.workspace, ws)
+          )
+        )
         .orderBy(asc(stockBatches.receivingDate), asc(stockBatches.id)),
       db
         .select({
@@ -2721,6 +3759,7 @@ apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
         })
         .from(stockMovements)
         .innerJoin(stockBatches, eq(stockMovements.stockBatchId, stockBatches.id))
+        .where(and(eq(stockMovements.workspace, ws), eq(stockBatches.workspace, ws)))
         .orderBy(desc(stockMovements.createdAt), desc(stockMovements.id))
         .limit(200),
       db
@@ -2743,8 +3782,13 @@ apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
         })
         .from(sales)
         .leftJoin(shops, eq(sales.shopId, shops.id))
+        .where(eq(sales.workspace, ws))
         .orderBy(desc(sales.saleDate), desc(sales.id)),
-      db.select().from(shops).orderBy(asc(shops.shopName)),
+      db
+        .select()
+        .from(shops)
+        .where(eq(shops.workspace, ws))
+        .orderBy(asc(shops.shopName)),
       db
         .select({
           id: dealerTransactions.id,
@@ -2763,8 +3807,13 @@ apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
         })
         .from(dealerTransactions)
         .innerJoin(suppliers, eq(dealerTransactions.supplierId, suppliers.id))
+        .where(and(eq(dealerTransactions.workspace, ws), eq(suppliers.workspace, ws)))
         .orderBy(desc(dealerTransactions.id)),
-      db.select().from(workers).orderBy(asc(workers.name)),
+      db
+        .select()
+        .from(workers)
+        .where(eq(workers.workspace, ws))
+        .orderBy(asc(workers.name)),
       db
         .select({
           id: workerPayments.id,
@@ -2778,16 +3827,25 @@ apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
         })
         .from(workerPayments)
         .innerJoin(workers, eq(workerPayments.workerId, workers.id))
+        .where(and(eq(workerPayments.workspace, ws), eq(workers.workspace, ws)))
         .orderBy(desc(workerPayments.paymentDate), desc(workerPayments.id)),
       db
         .select()
         .from(businessExpenses)
+        .where(eq(businessExpenses.workspace, ws))
         .orderBy(desc(businessExpenses.expenseDate), desc(businessExpenses.id)),
-      db.select().from(vehicles).orderBy(asc(vehicles.vehicleNumber)),
-      db.select().from(settings),
+      db
+        .select()
+        .from(vehicles)
+        .where(eq(vehicles.workspace, ws))
+        .orderBy(asc(vehicles.vehicleNumber)),
+      db.select().from(settings).where(eq(settings.workspace, ws)),
+      db
+        .select()
+        .from(loadExpenses)
+        .where(eq(loadExpenses.workspace, ws))
+        .orderBy(desc(loadExpenses.id)),
     ]);
-
-    const allLoadExps = await db.select().from(loadExpenses).orderBy(desc(loadExpenses.id));
 
     // Enrich suppliers
     const enrichedSuppliers = allSuppliers.map((sup) => {
@@ -2843,10 +3901,11 @@ apiRouter.get('/bootstrap', async (_req: Request, res: Response) => {
     });
 
     const config: Record<string, string> = {
-      businessName: 'Al-Madina Poultry Traders',
+      businessName:
+        ws === 'demo' ? 'Al-Madina Poultry Traders (Demo)' : 'Al-Madina Poultry Traders',
       businessLocation: 'Lahore Road, Punjab, Pakistan',
-      examplePrice1: '1200',
-      examplePrice2: '1500',
+      examplePrice1: ws === 'demo' ? '1850' : '1200',
+      examplePrice2: ws === 'demo' ? '1950' : '1500',
       lowStockThreshold: '300',
     };
     allSettings.forEach((s) => {

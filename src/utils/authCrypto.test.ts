@@ -8,6 +8,7 @@ import {
   parseCookies,
   extractTokenFromHeaders,
   getSessionSecret,
+  resolveUserWorkspace,
 } from './authCrypto';
 
 test('hashPassword and verifyPassword validate matching and non-matching passwords', () => {
@@ -48,6 +49,7 @@ test('signSessionToken and verifySessionToken enforce signature and expiry', () 
   assert.ok(validPayload);
   assert.equal(validPayload.email, 'owner@checkin.me');
   assert.equal(validPayload.role, 'owner');
+  assert.equal(validPayload.workspace, 'real');
 
   // Expired
   assert.equal(verifySessionToken(token, secret, now + 3600), null);
@@ -56,6 +58,32 @@ test('signSessionToken and verifySessionToken enforce signature and expiry', () 
   const tampered = `${token.slice(0, -4)}AAAA`;
   assert.equal(verifySessionToken(tampered, secret, now + 100), null);
   assert.equal(verifySessionToken(token, 'wrong-secret', now + 100), null);
+});
+
+test('demo session tokens resolve strictly to demo workspace', () => {
+  const secret = getSessionSecret('unit-test-secret');
+  const now = 1700000000;
+  assert.equal(resolveUserWorkspace({ role: 'owner' }), 'real');
+  assert.equal(resolveUserWorkspace({ role: 'demo' }), 'demo');
+  assert.equal(resolveUserWorkspace({ role: 'admin', workspace: 'demo' }), 'demo');
+
+  const demoToken = signSessionToken(
+    {
+      id: 2,
+      uid: 'demo-checkin-me',
+      email: 'demo@checkin.me',
+      name: 'Demo Account',
+      role: 'demo',
+      workspace: 'demo',
+    },
+    secret,
+    3600,
+    now
+  );
+  const demoPayload = verifySessionToken(demoToken, secret, now + 100);
+  assert.ok(demoPayload);
+  assert.equal(demoPayload.workspace, 'demo');
+  assert.equal(demoPayload.role, 'demo');
 });
 
 test('parseCookies and extractTokenFromHeaders prefer Bearer over cookie', () => {
