@@ -18,6 +18,7 @@ import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/f
 import { useAppStore } from '../store/useAppStore.ts';
 import { computeDashboardFromCollections } from '../utils/syncCalculations.ts';
 import { NavItemKey } from '../components/shell/FloatingIslandShell.tsx';
+import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
 
 interface DashboardPageProps {
   onNavigate: (tab: NavItemKey, subTab?: string) => void;
@@ -38,6 +39,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const workerPayments = useAppStore((s) => s.workerPayments);
   const loading = useAppStore((s) => s.loading);
   const initialized = useAppStore((s) => s.initialized);
+  const deleteSale = useAppStore((s) => s.deleteSale);
 
   const [period, setPeriod] = useState<string>('last7days');
   const [chartTimeframe, setChartTimeframe] = useState<'7D' | '30D' | '90D'>('7D');
@@ -693,6 +695,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     <th className="py-3 px-4 text-right font-medium">Birds</th>
                     <th className="py-3 px-4 text-right font-medium">Cash</th>
                     <th className="py-3 px-4 text-right font-medium">Profit</th>
+                    <th className="py-3 px-3 text-right font-medium">Remove</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E3E6E8] dark:divide-[#2A2F35] font-normal text-[#636B76] dark:text-[#A3AAB3] tabular-nums">
@@ -721,7 +724,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     ))
                   ) : recent.sales.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-[#7B848F]">
+                      <td colSpan={7} className="py-6 text-center text-[#7B848F]">
                         No sales recorded yet.
                       </td>
                     </tr>
@@ -762,6 +765,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                           }`}
                         >
                           {formatSignedPKR(sale.totalProfit)}
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <ConfirmDeleteButton
+                            ariaLabel={`Delete bill ${sale.invoiceNumber}`}
+                            onConfirm={() => deleteSale(sale.id)}
+                          />
                         </td>
                       </tr>
                     ))
@@ -809,19 +818,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         {formatDate(sale.saleDate)} · {sale.totalPieces} birds
                       </div>
                     </div>
-                    <div className="text-right shrink-0 tabular-nums">
-                      <div className="font-normal text-xs text-[#636B76] dark:text-[#A3AAB3]">
-                        {formatPKR(sale.totalAmount)}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right tabular-nums">
+                        <div className="font-normal text-xs text-[#636B76] dark:text-[#A3AAB3]">
+                          {formatPKR(sale.totalAmount)}
+                        </div>
+                        <div
+                          className={`font-normal text-[11px] ${
+                            Number(sale.totalProfit) >= 0
+                              ? 'text-[#2FB67C]'
+                              : 'text-[#D95C5C] dark:text-[#FF8585]'
+                          }`}
+                        >
+                          {formatSignedPKR(sale.totalProfit)}
+                        </div>
                       </div>
-                      <div
-                        className={`font-normal text-[11px] ${
-                          Number(sale.totalProfit) >= 0
-                            ? 'text-[#2FB67C]'
-                            : 'text-[#D95C5C] dark:text-[#FF8585]'
-                        }`}
-                      >
-                        {formatSignedPKR(sale.totalProfit)}
-                      </div>
+                      <ConfirmDeleteButton
+                        ariaLabel={`Delete bill ${sale.invoiceNumber}`}
+                        onConfirm={() => deleteSale(sale.id)}
+                      />
                     </div>
                   </div>
                 ))

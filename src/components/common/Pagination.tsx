@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import {
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
@@ -27,6 +28,8 @@ export const Pagination: React.FC<PaginationProps> = ({
   isStale = false,
   pageSizeOptions = PAGE_SIZE_OPTIONS,
 }) => {
+  const pillId = useId();
+
   if (total <= 0 && !isFetching) {
     return null;
   }
@@ -111,13 +114,20 @@ export const Pagination: React.FC<PaginationProps> = ({
                 onClick={() => onPageChange(entry)}
                 aria-label={`Page ${entry}`}
                 aria-current={entry === meta.currentPage ? 'page' : undefined}
-                className={`min-w-[34px] min-h-[34px] px-2 rounded-[10px] font-mono font-bold tabular-nums transition cursor-pointer ${
+                className={`relative min-w-[34px] min-h-[34px] px-2 rounded-full font-mono font-bold tabular-nums transition-colors cursor-pointer ${
                   entry === meta.currentPage
-                    ? 'bg-[#D4F56B] text-[#14161A] shadow-xs'
-                    : 'border border-transparent text-[#4A515B] dark:text-[#A3AAB3] hover:bg-[#EDEEEF] dark:hover:bg-[#272C33]'
+                    ? 'text-[#14161A]'
+                    : 'text-[#4A515B] dark:text-[#A3AAB3] hover:bg-[#EDEEEF] dark:hover:bg-[#272C33]'
                 }`}
               >
-                {entry}
+                {entry === meta.currentPage && (
+                  <motion.span
+                    layoutId={`paginationActivePill-${pillId}`}
+                    transition={{ type: 'spring', stiffness: 460, damping: 24, mass: 0.72 }}
+                    className="absolute inset-0 rounded-full bg-[#D4F56B] shadow-xs z-0"
+                  />
+                )}
+                <span className="relative z-10">{entry}</span>
               </button>
             )
           )}

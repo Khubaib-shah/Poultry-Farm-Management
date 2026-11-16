@@ -21,6 +21,7 @@ import {
   getPeriodRange,
 } from '../utils/syncCalculations.ts';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
+import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
 import {
   Sale,
   PurchaseLoad,
@@ -43,6 +44,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
   const loading = useAppStore((s) => s.loading);
   const initialized = useAppStore((s) => s.initialized);
   const isInitialLoading = loading && !initialized;
+
+  const deleteSale = useAppStore((s) => s.deleteSale);
+  const deletePurchase = useAppStore((s) => s.deletePurchase);
+  const deleteExpense = useAppStore((s) => s.deleteExpense);
+  const deleteWorkerPayment = useAppStore((s) => s.deleteWorkerPayment);
+  const deleteDealerTransaction = useAppStore((s) => s.deleteDealerTransaction);
 
   const todayStr = getLocalPakistanDate();
   const [rangeType, setRangeType] = useState<'today' | 'yesterday' | 'weekly' | 'monthly' | 'all' | 'custom'>('monthly');
@@ -302,6 +309,18 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
         </span>
       ),
     },
+    {
+      key: 'actions',
+      header: 'Remove',
+      align: 'right',
+      alwaysVisible: true,
+      render: (s) => (
+        <ConfirmDeleteButton
+          ariaLabel={`Delete bill ${s.invoiceNumber}`}
+          onConfirm={() => deleteSale(s.id)}
+        />
+      ),
+    },
   ];
 
   const purchaseColumns: DataTableColumn<PurchaseLoad>[] = [
@@ -390,6 +409,18 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
         </span>
       ),
     },
+    {
+      key: 'actions',
+      header: 'Remove',
+      align: 'right',
+      alwaysVisible: true,
+      render: (p) => (
+        <ConfirmDeleteButton
+          ariaLabel={`Delete truck load ${p.loadNumber}`}
+          onConfirm={() => deletePurchase(p.id)}
+        />
+      ),
+    },
   ];
 
   const expenseColumns: DataTableColumn<BusinessExpense>[] = [
@@ -441,6 +472,18 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
         </span>
       ),
     },
+    {
+      key: 'actions',
+      header: 'Remove',
+      align: 'right',
+      alwaysVisible: true,
+      render: (e) => (
+        <ConfirmDeleteButton
+          ariaLabel={`Delete expense ${e.category}`}
+          onConfirm={() => deleteExpense(e.id)}
+        />
+      ),
+    },
   ];
 
   const wageColumns: DataTableColumn<WorkerPayment>[] = [
@@ -481,6 +524,18 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       hideOnMobileDefault: true,
       sortValue: (w) => Number(w.amount),
       render: (w) => <span className="font-mono font-bold">{formatPKR(w.amount)}</span>,
+    },
+    {
+      key: 'actions',
+      header: 'Remove',
+      align: 'right',
+      alwaysVisible: true,
+      render: (w) => (
+        <ConfirmDeleteButton
+          ariaLabel={`Delete wage payment ${w.workerName || w.id}`}
+          onConfirm={() => deleteWorkerPayment(w.id)}
+        />
+      ),
     },
   ];
 
@@ -523,6 +578,18 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
       sortValue: (t) => Number(t.creditAmount),
       render: (t) => (
         <span className="font-mono font-bold text-[#2FB67C]">{formatPKR(t.creditAmount)}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Remove',
+      align: 'right',
+      alwaysVisible: true,
+      render: (t) => (
+        <ConfirmDeleteButton
+          ariaLabel={`Delete dealer payment ${t.supplierName || t.id}`}
+          onConfirm={() => deleteDealerTransaction(t.id)}
+        />
       ),
     },
   ];

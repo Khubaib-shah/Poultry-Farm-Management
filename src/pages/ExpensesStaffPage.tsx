@@ -13,6 +13,7 @@ import { BusinessExpense, Worker, WorkerPayment } from '../types/index.ts';
 import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
+import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
 import { formatPKR, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
@@ -63,6 +64,8 @@ export const ExpensesStaffPage: React.FC<ExpensesStaffPageProps> = ({
   const deleteExpense = useAppStore((s) => s.deleteExpense);
   const createWorker = useAppStore((s) => s.createWorker);
   const recordWorkerPayment = useAppStore((s) => s.recordWorkerPayment);
+  const deleteWorker = useAppStore((s) => s.deleteWorker);
+  const deleteWorkerPayment = useAppStore((s) => s.deleteWorkerPayment);
 
   const [activeTab, setActiveTab] = useState<ExpensesStaffSubTab>(initialSubTab);
 
@@ -413,6 +416,18 @@ export const ExpensesStaffPage: React.FC<ExpensesStaffPageProps> = ({
       hideOnMobileDefault: true,
       sortValue: (p) => Number(p.amount),
       render: (p) => <span className="font-normal tabular-nums">{formatPKR(p.amount)}</span>,
+    },
+    {
+      key: 'actions',
+      header: 'Remove',
+      align: 'right',
+      alwaysVisible: true,
+      render: (p) => (
+        <ConfirmDeleteButton
+          ariaLabel={`Delete wage payment ${p.workerName || p.id}`}
+          onConfirm={() => deleteWorkerPayment(p.id)}
+        />
+      ),
     },
   ];
 
@@ -774,6 +789,15 @@ export const ExpensesStaffPage: React.FC<ExpensesStaffPageProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <ConfirmDeleteButton
+                          compactSlot
+                          ariaLabel={`Delete staff member ${w.name}`}
+                          onConfirm={() => {
+                            if (workerFilter === String(w.id)) setWorkerFilter('ALL');
+                            if (selectedWorker?.id === w.id) setSelectedWorker(null);
+                            return deleteWorker(w.id);
+                          }}
+                        />
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1092,14 +1116,20 @@ export const ExpensesStaffPage: React.FC<ExpensesStaffPageProps> = ({
                 <div className="p-6 text-center text-[#636B76]">No payments recorded yet.</div>
               ) : (
                 selectedWorkerHistory.map((p) => (
-                  <div key={p.id} className="p-3 flex justify-between items-center">
-                    <div>
+                  <div key={p.id} className="p-3 flex justify-between items-center gap-3">
+                    <div className="min-w-0">
                       <div className="font-semibold">{p.description || 'Wage Payment'}</div>
                       <div className="text-[11px] text-[#636B76] font-mono">
                         {formatDate(p.paymentDate)} · {p.paymentMethod}
                       </div>
                     </div>
-                    <div className="font-mono font-bold">{formatPKR(p.amount)}</div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="font-mono font-bold">{formatPKR(p.amount)}</div>
+                      <ConfirmDeleteButton
+                        ariaLabel={`Delete wage payment ${p.id}`}
+                        onConfirm={() => deleteWorkerPayment(p.id)}
+                      />
+                    </div>
                   </div>
                 ))
               )}

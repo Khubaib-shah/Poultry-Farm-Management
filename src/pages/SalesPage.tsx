@@ -15,6 +15,7 @@ import { Sale } from '../types/index.ts';
 import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
+import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
@@ -41,6 +42,8 @@ export const SalesPage: React.FC<SalesPageProps> = ({
   const createOwnShopSale = useAppStore((s) => s.createOwnShopSale);
   const createShop = useAppStore((s) => s.createShop);
   const createWholesaleSale = useAppStore((s) => s.createWholesaleSale);
+  const deleteSale = useAppStore((s) => s.deleteSale);
+  const deleteShop = useAppStore((s) => s.deleteShop);
 
   const [activeTab, setActiveTab] = useState<SalesSubTab>(initialSubTab);
 
@@ -494,17 +497,24 @@ export const SalesPage: React.FC<SalesPageProps> = ({
       },
       {
         key: 'actions',
-        header: 'Details',
+        header: 'Actions',
         align: 'right',
         alwaysVisible: true,
         render: (s) => (
-          <button
-            type="button"
-            onClick={() => setSelectedSale(s)}
-            className="px-3 py-1.5 text-[11px] font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer"
-          >
-            View
-          </button>
+          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap min-w-[144px]">
+            <button
+              type="button"
+              onClick={() => setSelectedSale(s)}
+              className="px-3 py-1.5 text-[11px] font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer"
+            >
+              View
+            </button>
+            <ConfirmDeleteButton
+              compactSlot
+              ariaLabel={`Delete bill ${s.invoiceNumber}`}
+              onConfirm={() => deleteSale(s.id)}
+            />
+          </div>
         ),
       }
     );
@@ -512,8 +522,8 @@ export const SalesPage: React.FC<SalesPageProps> = ({
     return cols;
   };
 
-  const walkInColumns = useMemo(() => buildSaleColumns(false), []);
-  const wholesaleColumns = useMemo(() => buildSaleColumns(true), []);
+  const walkInColumns = useMemo(() => buildSaleColumns(false), [deleteSale]);
+  const wholesaleColumns = useMemo(() => buildSaleColumns(true), [deleteSale]);
 
   const subTabs: Array<{
     id: SalesSubTab;
@@ -940,16 +950,28 @@ export const SalesPage: React.FC<SalesPageProps> = ({
                             {formatNumber(shop.totalPiecesDelivered || 0)} birds
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeliveryModalForShop(shop.id);
-                          }}
-                          className="px-3 py-1.5 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] text-[11px] font-bold whitespace-nowrap cursor-pointer"
-                        >
-                          + Deliver
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <ConfirmDeleteButton
+                            compactSlot
+                            ariaLabel={`Delete buyer shop ${shop.shopName}`}
+                            onConfirm={() => {
+                              if (shopFilter === String(shop.id)) {
+                                setShopFilter('ALL');
+                              }
+                              return deleteShop(shop.id);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDeliveryModalForShop(shop.id);
+                            }}
+                            className="px-3 py-1.5 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] text-[11px] font-bold whitespace-nowrap cursor-pointer"
+                          >
+                            + Deliver
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1125,7 +1147,16 @@ export const SalesPage: React.FC<SalesPageProps> = ({
               )}
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-2 flex items-center justify-between gap-2">
+              <ConfirmDeleteButton
+                label="Delete Bill"
+                ariaLabel={`Delete bill ${selectedSale.invoiceNumber}`}
+                onConfirm={() => {
+                  const id = selectedSale.id;
+                  setSelectedSale(null);
+                  return deleteSale(id);
+                }}
+              />
               <button
                 type="button"
                 onClick={() => setSelectedSale(null)}

@@ -153,6 +153,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then((r) => handleResponse<Supplier>(r)),
+  deleteSupplier: (id: number) =>
+    apiFetch(`/api/suppliers/${id}`, { method: 'DELETE' }).then((r) =>
+      handleResponse<{ success: boolean }>(r)
+    ),
 
   // Dealer Ledger
   recordSupplierPayment: (data: {
@@ -167,6 +171,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then((r) => handleResponse<DealerTransaction>(r)),
+  deleteDealerTransaction: (id: number) =>
+    apiFetch(`/api/dealer-ledger/${id}`, { method: 'DELETE' }).then((r) =>
+      handleResponse<{ success: boolean; cascadedLoad?: boolean }>(r)
+    ),
 
   // Purchases & Loads
   createPurchase: (data: {
@@ -194,6 +202,10 @@ export const api = {
     }).then((r) => handleResponse<LoadExpense>(r)),
   deleteLoadExpense: (loadId: number, expenseId: number) =>
     apiFetch(`/api/purchases/${loadId}/expenses/${expenseId}`, { method: 'DELETE' }).then((r) =>
+      handleResponse<{ success: boolean }>(r)
+    ),
+  deletePurchase: (id: number) =>
+    apiFetch(`/api/purchases/${id}`, { method: 'DELETE' }).then((r) =>
       handleResponse<{ success: boolean }>(r)
     ),
   receiveStock: (
@@ -224,6 +236,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then((r) => handleResponse<StockMovement>(r)),
+  deleteBatch: (id: number) =>
+    apiFetch(`/api/inventory/batches/${id}`, { method: 'DELETE' }).then((r) =>
+      handleResponse<{ success: boolean; deletedSalesCount?: number }>(r)
+    ),
+  deleteMovement: (id: number) =>
+    apiFetch(`/api/inventory/movements/${id}`, { method: 'DELETE' }).then((r) =>
+      handleResponse<{ success: boolean; action?: string }>(r)
+    ),
 
   // Sales
   createOwnShopSale: (data: {
@@ -254,6 +274,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then((r) => handleResponse<{ sale: Sale; summary: unknown }>(r)),
+  deleteSale: (id: number) =>
+    apiFetch(`/api/sales/${id}`, { method: 'DELETE' }).then((r) =>
+      handleResponse<{ success: boolean; restoredPieces?: number }>(r)
+    ),
 
   // Wholesale Shops
   createShop: (data: Partial<Shop>) =>
@@ -262,6 +286,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then((r) => handleResponse<Shop>(r)),
+  deleteShop: (id: number) =>
+    apiFetch(`/api/shops/${id}`, { method: 'DELETE' }).then((r) =>
+      handleResponse<{ success: boolean }>(r)
+    ),
 
   // Workers
   createWorker: (data: Partial<Worker>) =>
@@ -270,6 +298,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then((r) => handleResponse<Worker>(r)),
+  deleteWorker: (id: number) =>
+    apiFetch(`/api/workers/${id}`, { method: 'DELETE' }).then((r) =>
+      handleResponse<{ success: boolean }>(r)
+    ),
   recordWorkerPayment: (
     workerId: number,
     data: { amount: number; paymentDate?: string; paymentMethod?: string; description?: string }
@@ -279,6 +311,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then((r) => handleResponse<WorkerPayment>(r)),
+  deleteWorkerPayment: (id: number) =>
+    apiFetch(`/api/worker-payments/${id}`, { method: 'DELETE' }).then((r) =>
+      handleResponse<{ success: boolean }>(r)
+    ),
 
   // General Expenses
   createExpense: (data: {

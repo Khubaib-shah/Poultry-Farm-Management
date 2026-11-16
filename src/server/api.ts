@@ -18,7 +18,7 @@ import {
   businessExpenses,
   settings,
 } from '../db/schema.ts';
-import { eq, desc, asc, and, gte, lte, sql } from 'drizzle-orm';
+import { eq, desc, asc, and, gte, lte, inArray, sql } from 'drizzle-orm';
 import {
   calculatePurchaseRate,
   calculateSaleablePieces,
@@ -28,6 +28,12 @@ import {
   consumeBatchesFifo,
   calculatePnl,
 } from '../utils/poultryMath.ts';
+import {
+  applySaleDeletionToBatches,
+  recomputeDealerTransactionBalances,
+  recalculateSaleAfterBatchRemoval,
+  applyMovementDeletionToBatch,
+} from '../utils/deleteHelpers.ts';
 import {
   verifyPassword,
   signSessionToken,
@@ -46,6 +52,252 @@ import {
 
 const SESSION_COOKIE_NAME = 'checkin_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+
+type DbExecutor = Pick<typeof db, 'select' | 'insert' | 'update' | 'delete'>;
+
+async function recomputeSupplierBalancesTx(
+  tx: DbExecutor,
+  ws: WorkspaceMode,
+  supplierId: number
+): Promise<number> {
+  const [sup] = await tx
+    .select()
+    .from(suppliers)
+    .where(and(eq(suppliers.id, supplierId), eq(suppliers.workspace, ws)));
+  if (!sup) return 0;
+
+  const txs = await tx
+    .select()
+    .from(dealerTransactions)
+    .where(and(eq(dealerTransactions.supplierId, supplierId), eq(dealerTransactions.workspace, ws)))
+    .orderBy(asc(dealerTransactions.id));
+
+  const { updated, latestBalance } = recomputeDealerTransactionBalances(
+    txs,
+    Number(sup.openingBalance)
+  );
+
+  for (let i = 0; i < updated.length; i++) {
+    const row = updated[i];
+    const orig = txs[i];
+    if (String(orig.balanceAfter) !== row.balanceAfter) {
+      await tx
+        .update(dealerTransactions)
+        .set({ balanceAfter: row.balanceAfter })
+        .where(and(eq(dealerTransactions.id, row.id), eq(dealerTransactions.workspace, ws)));
+    }
+  }
+
+  return latestBalance;
+}
+
+async function deleteSaleCascadeTx(
+  tx: DbExecutor,
+  ws: WorkspaceMode,
+  saleId: number
+): Promise<{ found: boolean; restoredPieces: number }> {
+  const [sale] = await tx
+    .select()
+    .from(sales)
+    .where(and(eq(sales.id, saleId), eq(sales.workspace, ws)));
+  if (!sale) return { found: false, restoredPieces: 0 };
+
+  const items = await tx
+    .select()
+    .from(saleItems)
+    .where(and(eq(saleItems.saleId, saleId), eq(saleItems.workspace, ws)));
+
+  const batchIds = [...new Set(items.map((i) => i.stockBatchId))];
+  if (batchIds.length > 0) {
+    const existingBatches = await tx
+      .select()
+      .from(stockBatches)
+      .where(and(eq(stockBatches.workspace, ws), inArray(stockBatches.id, batchIds)));
+
+    const restoredBatches = applySaleDeletionToBatches(
+      existingBatches,
+      items.map((i) => ({ stockBatchId: i.stockBatchId, quantity: i.quantity }))
+    );
+
+    for (let i = 0; i < existingBatches.length; i++) {
+      const before = existingBatches[i];
+      const after = restoredBatches[i];
+      if (
+        before.remainingPieces !== after.remainingPieces ||
+        before.soldPieces !== after.soldPieces ||
+        before.isClosed !== after.isClosed
+      ) {
+        await tx
+          .update(stockBatches)
+          .set({
+            remainingPieces: after.remainingPieces,
+            soldPieces: after.soldPieces,
+            isClosed: after.isClosed,
+          })
+          .where(and(eq(stockBatches.id, after.id), eq(stockBatches.workspace, ws)));
+      }
+    }
+  }
+
+  await tx
+    .delete(stockMovements)
+    .where(
+      and(
+        eq(stockMovements.workspace, ws),
+        eq(stockMovements.referenceId, saleId),
+        inArray(stockMovements.referenceType, ['SALE', 'SHOP_DISTRIBUTION'])
+      )
+    );
+
+  await tx
+    .delete(saleItems)
+    .where(and(eq(saleItems.saleId, saleId), eq(saleItems.workspace, ws)));
+
+  await tx
+    .delete(sales)
+    .where(and(eq(sales.id, saleId), eq(sales.workspace, ws)));
+
+  return { found: true, restoredPieces: sale.totalPieces };
+}
+
+async function deleteBatchCascadeTx(
+  tx: DbExecutor,
+  ws: WorkspaceMode,
+  batchId: number,
+  resetParentLoadStatus: boolean
+): Promise<{ found: boolean; purchaseLoadId: number | null; deletedSalesCount: number }> {
+  const [batch] = await tx
+    .select()
+    .from(stockBatches)
+    .where(and(eq(stockBatches.id, batchId), eq(stockBatches.workspace, ws)));
+  if (!batch) return { found: false, purchaseLoadId: null, deletedSalesCount: 0 };
+
+  const items = await tx
+    .select()
+    .from(saleItems)
+    .where(and(eq(saleItems.stockBatchId, batchId), eq(saleItems.workspace, ws)));
+
+  const affectedSaleIds = [...new Set(items.map((i) => i.saleId))];
+
+  await tx
+    .delete(stockMovements)
+    .where(and(eq(stockMovements.stockBatchId, batchId), eq(stockMovements.workspace, ws)));
+
+  await tx
+    .delete(saleItems)
+    .where(and(eq(saleItems.stockBatchId, batchId), eq(saleItems.workspace, ws)));
+
+  let deletedSalesCount = 0;
+  for (const saleId of affectedSaleIds) {
+    const [sale] = await tx
+      .select()
+      .from(sales)
+      .where(and(eq(sales.id, saleId), eq(sales.workspace, ws)));
+    if (!sale) continue;
+
+    const remainingItems = await tx
+      .select()
+      .from(saleItems)
+      .where(and(eq(saleItems.saleId, saleId), eq(saleItems.workspace, ws)));
+
+    const recalc = recalculateSaleAfterBatchRemoval(sale.totalAmount, remainingItems);
+    if (!recalc) {
+      await tx
+        .delete(stockMovements)
+        .where(
+          and(
+            eq(stockMovements.workspace, ws),
+            eq(stockMovements.referenceId, saleId),
+            inArray(stockMovements.referenceType, ['SALE', 'SHOP_DISTRIBUTION'])
+          )
+        );
+      await tx.delete(sales).where(and(eq(sales.id, saleId), eq(sales.workspace, ws)));
+      deletedSalesCount++;
+    } else {
+      await tx
+        .update(sales)
+        .set({
+          totalPieces: recalc.totalPieces,
+          totalCost: recalc.totalCost,
+          totalProfit: recalc.totalProfit,
+          sellingPricePerPiece: recalc.sellingPricePerPiece,
+          costPerPiece: recalc.costPerPiece,
+          profitPerPiece: recalc.profitPerPiece,
+        })
+        .where(and(eq(sales.id, saleId), eq(sales.workspace, ws)));
+    }
+  }
+
+  await tx
+    .delete(stockBatches)
+    .where(and(eq(stockBatches.id, batchId), eq(stockBatches.workspace, ws)));
+
+  if (resetParentLoadStatus && batch.purchaseLoadId) {
+    await tx
+      .update(purchaseLoads)
+      .set({ status: 'PENDING_RECEIVING' })
+      .where(and(eq(purchaseLoads.id, batch.purchaseLoadId), eq(purchaseLoads.workspace, ws)));
+  }
+
+  return {
+    found: true,
+    purchaseLoadId: batch.purchaseLoadId ?? null,
+    deletedSalesCount,
+  };
+}
+
+async function deletePurchaseLoadCascadeTx(
+  tx: DbExecutor,
+  ws: WorkspaceMode,
+  loadId: number
+): Promise<{ found: boolean; supplierId: number | null }> {
+  const [load] = await tx
+    .select()
+    .from(purchaseLoads)
+    .where(and(eq(purchaseLoads.id, loadId), eq(purchaseLoads.workspace, ws)));
+  if (!load) return { found: false, supplierId: null };
+
+  const linkedBatches = await tx
+    .select({ id: stockBatches.id })
+    .from(stockBatches)
+    .where(and(eq(stockBatches.purchaseLoadId, loadId), eq(stockBatches.workspace, ws)));
+
+  for (const b of linkedBatches) {
+    await deleteBatchCascadeTx(tx, ws, b.id, false);
+  }
+
+  await tx
+    .delete(stockMovements)
+    .where(
+      and(
+        eq(stockMovements.workspace, ws),
+        eq(stockMovements.referenceType, 'PURCHASE_LOAD'),
+        eq(stockMovements.referenceId, loadId)
+      )
+    );
+
+  await tx
+    .delete(loadExpenses)
+    .where(and(eq(loadExpenses.purchaseLoadId, loadId), eq(loadExpenses.workspace, ws)));
+
+  await tx
+    .delete(dealerTransactions)
+    .where(
+      and(
+        eq(dealerTransactions.workspace, ws),
+        eq(dealerTransactions.referenceType, 'PURCHASE_LOAD'),
+        eq(dealerTransactions.referenceId, loadId)
+      )
+    );
+
+  await tx
+    .delete(purchaseLoads)
+    .where(and(eq(purchaseLoads.id, loadId), eq(purchaseLoads.workspace, ws)));
+
+  await recomputeSupplierBalancesTx(tx, ws, load.supplierId);
+
+  return { found: true, supplierId: load.supplierId };
+}
 
 function getAuthSecret(): string {
   return getSessionSecret(
@@ -482,6 +734,50 @@ apiRouter.put('/suppliers/:id', async (req: Request, res: Response) => {
   }
 });
 
+apiRouter.delete('/suppliers/:id', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+    const supplierId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(supplierId)) {
+      return res.status(400).json({ error: 'Invalid supplier id' });
+    }
+
+    const found = await db.transaction(async (tx) => {
+      const [sup] = await tx
+        .select()
+        .from(suppliers)
+        .where(and(eq(suppliers.id, supplierId), eq(suppliers.workspace, ws)));
+      if (!sup) return false;
+
+      const loads = await tx
+        .select({ id: purchaseLoads.id })
+        .from(purchaseLoads)
+        .where(and(eq(purchaseLoads.supplierId, supplierId), eq(purchaseLoads.workspace, ws)));
+
+      for (const load of loads) {
+        await deletePurchaseLoadCascadeTx(tx, ws, load.id);
+      }
+
+      await tx
+        .delete(dealerTransactions)
+        .where(and(eq(dealerTransactions.supplierId, supplierId), eq(dealerTransactions.workspace, ws)));
+
+      await tx
+        .delete(suppliers)
+        .where(and(eq(suppliers.id, supplierId), eq(suppliers.workspace, ws)));
+
+      return true;
+    });
+
+    if (!found) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // -------------------------------------------------------------
 // 3. DEALER TRANSACTIONS & PAYMENTS
 // -------------------------------------------------------------
@@ -611,6 +907,50 @@ apiRouter.post('/dealer-ledger/payment', async (req: Request, res: Response) => 
       .returning();
 
     res.status(201).json(tx);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.delete('/dealer-ledger/:id', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+    const txId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(txId)) {
+      return res.status(400).json({ error: 'Invalid dealer transaction id' });
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [entry] = await tx
+        .select()
+        .from(dealerTransactions)
+        .where(and(eq(dealerTransactions.id, txId), eq(dealerTransactions.workspace, ws)));
+      if (!entry) return { found: false, cascadedLoad: false };
+
+      if (entry.referenceType === 'PURCHASE_LOAD' && entry.referenceId) {
+        await deletePurchaseLoadCascadeTx(tx, ws, entry.referenceId);
+        return { found: true, cascadedLoad: true };
+      }
+
+      if (entry.referenceType === 'OPENING_BALANCE') {
+        await tx
+          .update(suppliers)
+          .set({ openingBalance: '0.00', updatedAt: new Date() })
+          .where(and(eq(suppliers.id, entry.supplierId), eq(suppliers.workspace, ws)));
+      }
+
+      await tx
+        .delete(dealerTransactions)
+        .where(and(eq(dealerTransactions.id, txId), eq(dealerTransactions.workspace, ws)));
+
+      await recomputeSupplierBalancesTx(tx, ws, entry.supplierId);
+      return { found: true, cascadedLoad: false };
+    });
+
+    if (!result.found) {
+      return res.status(404).json({ error: 'Dealer transaction not found' });
+    }
+    res.json({ success: true, cascadedLoad: result.cascadedLoad });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -986,6 +1326,25 @@ apiRouter.post('/purchases/:id/expenses', async (req: Request, res: Response) =>
   }
 });
 
+apiRouter.delete('/purchases/:id', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+    const loadId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(loadId)) {
+      return res.status(400).json({ error: 'Invalid purchase load id' });
+    }
+
+    const result = await db.transaction((tx) => deletePurchaseLoadCascadeTx(tx, ws, loadId));
+    if (!result.found) {
+      return res.status(404).json({ error: 'Purchase load not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 apiRouter.delete('/purchases/:id/expenses/:expenseId', async (req: Request, res: Response) => {
   try {
     const ws = getRequestWorkspace(req);
@@ -1352,6 +1711,87 @@ apiRouter.post('/inventory/adjust', async (req: Request, res: Response) => {
       .returning();
 
     res.status(201).json(mov);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.delete('/inventory/batches/:id', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+    const batchId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(batchId)) {
+      return res.status(400).json({ error: 'Invalid stock batch id' });
+    }
+
+    const result = await db.transaction((tx) => deleteBatchCascadeTx(tx, ws, batchId, true));
+    if (!result.found) {
+      return res.status(404).json({ error: 'Stock batch not found' });
+    }
+    res.json({ success: true, deletedSalesCount: result.deletedSalesCount });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.delete('/inventory/movements/:id', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+    const movId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(movId)) {
+      return res.status(400).json({ error: 'Invalid stock movement id' });
+    }
+
+    const outcome = await db.transaction(async (tx) => {
+      const [mov] = await tx
+        .select()
+        .from(stockMovements)
+        .where(and(eq(stockMovements.id, movId), eq(stockMovements.workspace, ws)));
+      if (!mov) return { status: 404 as const, error: 'Stock movement not found' };
+
+      if (
+        (mov.referenceType === 'SALE' || mov.referenceType === 'SHOP_DISTRIBUTION') &&
+        mov.referenceId
+      ) {
+        await deleteSaleCascadeTx(tx, ws, mov.referenceId);
+        return { status: 200 as const, action: 'deleted_sale' };
+      }
+
+      if (mov.referenceType === 'PURCHASE_LOAD') {
+        await deleteBatchCascadeTx(tx, ws, mov.stockBatchId, true);
+        return { status: 200 as const, action: 'deleted_batch' };
+      }
+
+      const [batch] = await tx
+        .select()
+        .from(stockBatches)
+        .where(and(eq(stockBatches.id, mov.stockBatchId), eq(stockBatches.workspace, ws)));
+
+      if (batch) {
+        const reversal = applyMovementDeletionToBatch(batch, mov.quantity);
+        if (!reversal.ok) {
+          return { status: 400 as const, error: reversal.error };
+        }
+        await tx
+          .update(stockBatches)
+          .set({
+            remainingPieces: reversal.batch.remainingPieces,
+            isClosed: reversal.batch.isClosed,
+          })
+          .where(and(eq(stockBatches.id, batch.id), eq(stockBatches.workspace, ws)));
+      }
+
+      await tx
+        .delete(stockMovements)
+        .where(and(eq(stockMovements.id, movId), eq(stockMovements.workspace, ws)));
+
+      return { status: 200 as const, action: 'deleted_adjustment' };
+    });
+
+    if (outcome.status !== 200) {
+      return res.status(outcome.status).json({ error: outcome.error });
+    }
+    res.json({ success: true, action: outcome.action });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1791,6 +2231,25 @@ apiRouter.post('/sales/wholesale', async (req: Request, res: Response) => {
   }
 });
 
+apiRouter.delete('/sales/:id', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+    const saleId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(saleId)) {
+      return res.status(400).json({ error: 'Invalid sale id' });
+    }
+
+    const result = await db.transaction((tx) => deleteSaleCascadeTx(tx, ws, saleId));
+    if (!result.found) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+
+    res.json({ success: true, restoredPieces: result.restoredPieces });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // -------------------------------------------------------------
 // 9. WHOLESALE SHOPS
 // -------------------------------------------------------------
@@ -1846,6 +2305,46 @@ apiRouter.post('/shops', async (req: Request, res: Response) => {
       })
       .returning();
     res.status(201).json(created);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.delete('/shops/:id', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+    const shopId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(shopId)) {
+      return res.status(400).json({ error: 'Invalid shop id' });
+    }
+
+    const found = await db.transaction(async (tx) => {
+      const [shop] = await tx
+        .select()
+        .from(shops)
+        .where(and(eq(shops.id, shopId), eq(shops.workspace, ws)));
+      if (!shop) return false;
+
+      const linkedSales = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(and(eq(sales.shopId, shopId), eq(sales.workspace, ws)));
+
+      for (const s of linkedSales) {
+        await deleteSaleCascadeTx(tx, ws, s.id);
+      }
+
+      await tx
+        .delete(shops)
+        .where(and(eq(shops.id, shopId), eq(shops.workspace, ws)));
+
+      return true;
+    });
+
+    if (!found) {
+      return res.status(404).json({ error: 'Shop not found' });
+    }
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1927,6 +2426,41 @@ apiRouter.put('/workers/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Worker not found' });
     }
     res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.delete('/workers/:id', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'Invalid worker id' });
+    }
+
+    const found = await db.transaction(async (tx) => {
+      const [worker] = await tx
+        .select()
+        .from(workers)
+        .where(and(eq(workers.id, id), eq(workers.workspace, ws)));
+      if (!worker) return false;
+
+      await tx
+        .delete(workerPayments)
+        .where(and(eq(workerPayments.workerId, id), eq(workerPayments.workspace, ws)));
+
+      await tx
+        .delete(workers)
+        .where(and(eq(workers.id, id), eq(workers.workspace, ws)));
+
+      return true;
+    });
+
+    if (!found) {
+      return res.status(404).json({ error: 'Worker not found' });
+    }
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -2052,6 +2586,28 @@ apiRouter.get('/worker-payments', async (req: Request, res: Response) => {
     });
 
     res.json(paginated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+apiRouter.delete('/worker-payments/:id', async (req: Request, res: Response) => {
+  try {
+    const ws = getRequestWorkspace(req);
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'Invalid payment id' });
+    }
+
+    const [deleted] = await db
+      .delete(workerPayments)
+      .where(and(eq(workerPayments.id, id), eq(workerPayments.workspace, ws)))
+      .returning();
+
+    if (!deleted) {
+      return res.status(404).json({ error: 'Wage payment not found' });
+    }
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

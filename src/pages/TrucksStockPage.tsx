@@ -16,6 +16,7 @@ import { PurchaseLoad, StockBatch, StockMovement } from '../types/index.ts';
 import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
+import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
 import { formatPKR, formatNumber, formatDate, formatDateTime } from '../utils/formatters.ts';
 import {
   calculatePurchaseRate,
@@ -63,6 +64,9 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
   const deleteLoadExpense = useAppStore((s) => s.deleteLoadExpense);
   const receiveStock = useAppStore((s) => s.receiveStock);
   const adjustStock = useAppStore((s) => s.adjustStock);
+  const deletePurchase = useAppStore((s) => s.deletePurchase);
+  const deleteBatch = useAppStore((s) => s.deleteBatch);
+  const deleteMovement = useAppStore((s) => s.deleteMovement);
 
   const [activeTab, setActiveTab] = useState<TrucksStockSubTab>(initialSubTab);
 
@@ -561,7 +565,7 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
       align: 'right',
       alwaysVisible: true,
       render: (load) => (
-        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap min-w-[186px]">
           {load.status !== 'RECEIVED' && (
             <button
               type="button"
@@ -585,6 +589,11 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
           >
             Costs & Info
           </button>
+          <ConfirmDeleteButton
+            compactSlot
+            ariaLabel={`Delete truck load ${load.loadNumber}`}
+            onConfirm={() => deletePurchase(load.id)}
+          />
         </div>
       ),
     },
@@ -704,20 +713,26 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
     },
     {
       key: 'actions',
-      header: 'Check Rate',
+      header: 'Actions',
       align: 'right',
       alwaysVisible: true,
       render: (b) => (
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedBatchId(String(b.id));
-            setActiveTab('calculator');
-          }}
-          className="px-3 py-1.5 text-[11px] font-medium rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer whitespace-nowrap"
-        >
-          Check Profit
-        </button>
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedBatchId(String(b.id));
+              setActiveTab('calculator');
+            }}
+            className="px-3 py-1.5 text-[11px] font-medium rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] cursor-pointer whitespace-nowrap"
+          >
+            Check Profit
+          </button>
+          <ConfirmDeleteButton
+            ariaLabel={`Delete stock lot ${b.batchNumber}`}
+            onConfirm={() => deleteBatch(b.id)}
+          />
+        </div>
       ),
     },
   ];
@@ -813,6 +828,18 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
         <span className="text-[#636B76] dark:text-[#8A929C] truncate max-w-[240px] block">
           {m.notes || m.referenceType || '-'}
         </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Remove',
+      align: 'right',
+      alwaysVisible: true,
+      render: (m) => (
+        <ConfirmDeleteButton
+          ariaLabel={`Delete stock movement ${m.batchNumber}`}
+          onConfirm={() => deleteMovement(m.id)}
+        />
       ),
     },
   ];
@@ -1819,7 +1846,16 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
               </form>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <ConfirmDeleteButton
+                label="Delete Truck"
+                ariaLabel={`Delete truck load ${loadDetails.loadNumber}`}
+                onConfirm={() => {
+                  const id = loadDetails.id;
+                  setSelectedLoadId(null);
+                  return deletePurchase(id);
+                }}
+              />
               <button
                 type="button"
                 onClick={() => setSelectedLoadId(null)}

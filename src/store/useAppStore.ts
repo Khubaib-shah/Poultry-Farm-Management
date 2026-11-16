@@ -26,6 +26,11 @@ import { ToastMessage } from '../components/common/Toast.tsx';
 import { createStoreMutationGuard } from '../utils/submitThrottle.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
 import { pageResponseCache } from '../utils/paginationCache.ts';
+import {
+  applySaleDeletionToBatches,
+  recomputeDealerTransactionBalances,
+  applyMovementDeletionToBatch,
+} from '../utils/deleteHelpers.ts';
 
 export interface OptimisticMutationOptions<T = void> {
   onOptimistic?: (optimisticValue: T) => void;
@@ -214,6 +219,51 @@ interface AppStore extends CoreDataState {
   ) => Promise<BusinessExpense>;
 
   deleteExpense: (
+    id: number,
+    options?: OptimisticMutationOptions<void>
+  ) => Promise<void>;
+
+  deleteSale: (
+    id: number,
+    options?: OptimisticMutationOptions<void>
+  ) => Promise<void>;
+
+  deletePurchase: (
+    id: number,
+    options?: OptimisticMutationOptions<void>
+  ) => Promise<void>;
+
+  deleteBatch: (
+    id: number,
+    options?: OptimisticMutationOptions<void>
+  ) => Promise<void>;
+
+  deleteMovement: (
+    id: number,
+    options?: OptimisticMutationOptions<void>
+  ) => Promise<void>;
+
+  deleteDealerTransaction: (
+    id: number,
+    options?: OptimisticMutationOptions<void>
+  ) => Promise<void>;
+
+  deleteSupplier: (
+    id: number,
+    options?: OptimisticMutationOptions<void>
+  ) => Promise<void>;
+
+  deleteShop: (
+    id: number,
+    options?: OptimisticMutationOptions<void>
+  ) => Promise<void>;
+
+  deleteWorker: (
+    id: number,
+    options?: OptimisticMutationOptions<void>
+  ) => Promise<void>;
+
+  deleteWorkerPayment: (
     id: number,
     options?: OptimisticMutationOptions<void>
   ) => Promise<void>;
@@ -1791,6 +1841,673 @@ export const useAppStore = create<AppStore>((set, get) => {
           } else {
             void get().refreshInBackground();
           get().invalidateDataCache();
+            set({ globalError: msg });
+          }
+          options?.onRollback?.(err);
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    deleteSale: (id, options) =>
+      mutationGuard.run('deleteSale', { id }, async () => {
+        const snapshot = takeSnapshot(get());
+        const realOrMappedId = id > 0 ? id : get().resolvedIdMap[id] ?? id;
+
+        mutationEpoch += 1;
+        const myEpoch = mutationEpoch;
+
+        set((s) => {
+          const targetSale = s.sales.find((x) => x.id === id || x.id === realOrMappedId);
+          const matchSaleId = targetSale?.id ?? realOrMappedId;
+          const restores =
+            targetSale?.items && targetSale.items.length > 0
+              ? targetSale.items.map((item) => ({
+                  stockBatchId: item.stockBatchId,
+                  quantity: item.quantity,
+                }))
+              : s.movements
+                  .filter(
+                    (m) =>
+                      (m.referenceType === 'SALE' || m.referenceType === 'SHOP_DISTRIBUTION') &&
+                      (m.referenceId === id || m.referenceId === matchSaleId)
+                  )
+                  .map((m) => ({
+                    stockBatchId: m.stockBatchId,
+                    quantity: Math.abs(m.quantity),
+                  }));
+
+          const restoredBatches = applySaleDeletionToBatches(s.batches, restores);
+          return {
+            sales: s.sales.filter((x) => x.id !== id && x.id !== matchSaleId),
+            batches: restoredBatches,
+            movements: s.movements.filter(
+              (m) =>
+                !(
+                  (m.referenceType === 'SALE' || m.referenceType === 'SHOP_DISTRIBUTION') &&
+                  (m.referenceId === id || m.referenceId === matchSaleId)
+                )
+            ),
+            shops:
+              targetSale?.shopId != null
+                ? s.shops.map((sh) =>
+                    sh.id === targetSale.shopId
+                      ? {
+                          ...sh,
+                          ordersCount: Math.max(0, (sh.ordersCount || 0) - 1),
+                          totalPiecesDelivered: Math.max(
+                            0,
+                            (sh.totalPiecesDelivered || 0) - targetSale.totalPieces
+                          ),
+                          totalSalesAmount: Math.max(
+                            0,
+                            (sh.totalSalesAmount || 0) - Number(targetSale.totalAmount)
+                          ),
+                        }
+                      : sh
+                  )
+                : s.shops,
+            syncingCount: s.syncingCount + 1,
+            globalError: null,
+          };
+        });
+
+        const toastId = pushToast('Bill deleted and bird stock restored', 'success');
+        options?.onOptimistic?.();
+
+        try {
+          const realId = await resolveRealId(realOrMappedId, () => get().resolvedIdMap);
+          await api.deleteSale(realId);
+          options?.onSynced?.();
+          void get().refreshInBackground();
+          get().invalidateDataCache();
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to delete sale. Reverted.';
+          get().dismissToast(toastId);
+          if (mutationEpoch === myEpoch) {
+            set({ ...snapshot, globalError: msg });
+          } else {
+            void get().refreshInBackground();
+            get().invalidateDataCache();
+            set({ globalError: msg });
+          }
+          options?.onRollback?.(err);
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    deletePurchase: (id, options) =>
+      mutationGuard.run('deletePurchase', { id }, async () => {
+        const snapshot = takeSnapshot(get());
+        const realOrMappedId = id > 0 ? id : get().resolvedIdMap[id] ?? id;
+
+        mutationEpoch += 1;
+        const myEpoch = mutationEpoch;
+
+        set((s) => {
+          const targetLoad = s.purchases.find((p) => p.id === id || p.id === realOrMappedId);
+          const matchLoadId = targetLoad?.id ?? realOrMappedId;
+          const linkedBatchIds = new Set(
+            s.batches
+              .filter((b) => b.purchaseLoadId === id || b.purchaseLoadId === matchLoadId)
+              .map((b) => b.id)
+          );
+          const affectedSaleIds = new Set(
+            s.movements
+              .filter(
+                (m) =>
+                  linkedBatchIds.has(m.stockBatchId) &&
+                  (m.referenceType === 'SALE' || m.referenceType === 'SHOP_DISTRIBUTION') &&
+                  m.referenceId != null
+              )
+              .map((m) => m.referenceId as number)
+          );
+
+          const remainingTxAll = s.dealerTransactions.filter(
+            (t) =>
+              !(
+                t.referenceType === 'PURCHASE_LOAD' &&
+                (t.referenceId === id || t.referenceId === matchLoadId)
+              )
+          );
+
+          let updatedTx = remainingTxAll;
+          let updatedSuppliers = s.suppliers;
+          if (targetLoad) {
+            const sup = s.suppliers.find((x) => x.id === targetLoad.supplierId);
+            const supTxs = remainingTxAll.filter((t) => t.supplierId === targetLoad.supplierId);
+            const { updated, latestBalance } = recomputeDealerTransactionBalances(
+              supTxs,
+              Number(sup?.openingBalance || 0)
+            );
+            const balMap = new Map(updated.map((u) => [u.id, u.balanceAfter]));
+            updatedTx = remainingTxAll.map((t) =>
+              balMap.has(t.id) ? { ...t, balanceAfter: balMap.get(t.id)! } : t
+            );
+            updatedSuppliers = s.suppliers.map((x) =>
+              x.id === targetLoad.supplierId
+                ? {
+                    ...x,
+                    currentBalance: latestBalance,
+                    totalPurchasesAmount: Math.max(
+                      0,
+                      (x.totalPurchasesAmount || 0) - Number(targetLoad.purchaseAmount)
+                    ),
+                    purchaseCount: Math.max(0, (x.purchaseCount || 0) - 1),
+                  }
+                : x
+            );
+          }
+
+          return {
+            purchases: s.purchases.filter((p) => p.id !== id && p.id !== matchLoadId),
+            batches: s.batches.filter((b) => !linkedBatchIds.has(b.id)),
+            sales: s.sales.filter((sale) => !affectedSaleIds.has(sale.id)),
+            movements: s.movements.filter(
+              (m) =>
+                !linkedBatchIds.has(m.stockBatchId) &&
+                !(
+                  m.referenceType === 'PURCHASE_LOAD' &&
+                  (m.referenceId === id || m.referenceId === matchLoadId)
+                ) &&
+                !(m.referenceId != null && affectedSaleIds.has(m.referenceId))
+            ),
+            dealerTransactions: updatedTx,
+            suppliers: updatedSuppliers,
+            syncingCount: s.syncingCount + 1,
+            globalError: null,
+          };
+        });
+
+        const toastId = pushToast('Truck load & linked records deleted', 'success');
+        options?.onOptimistic?.();
+
+        try {
+          const realId = await resolveRealId(realOrMappedId, () => get().resolvedIdMap);
+          await api.deletePurchase(realId);
+          options?.onSynced?.();
+          void get().refreshInBackground();
+          get().invalidateDataCache();
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to delete truck load. Reverted.';
+          get().dismissToast(toastId);
+          if (mutationEpoch === myEpoch) {
+            set({ ...snapshot, globalError: msg });
+          } else {
+            void get().refreshInBackground();
+            get().invalidateDataCache();
+            set({ globalError: msg });
+          }
+          options?.onRollback?.(err);
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    deleteBatch: (id, options) =>
+      mutationGuard.run('deleteBatch', { id }, async () => {
+        const snapshot = takeSnapshot(get());
+        const realOrMappedId = id > 0 ? id : get().resolvedIdMap[id] ?? id;
+
+        mutationEpoch += 1;
+        const myEpoch = mutationEpoch;
+
+        set((s) => {
+          const targetBatch = s.batches.find((b) => b.id === id || b.id === realOrMappedId);
+          const matchBatchId = targetBatch?.id ?? realOrMappedId;
+          const affectedSaleIds = new Set(
+            s.movements
+              .filter(
+                (m) =>
+                  m.stockBatchId === matchBatchId &&
+                  (m.referenceType === 'SALE' || m.referenceType === 'SHOP_DISTRIBUTION') &&
+                  m.referenceId != null
+              )
+              .map((m) => m.referenceId as number)
+          );
+
+          return {
+            batches: s.batches.filter((b) => b.id !== id && b.id !== matchBatchId),
+            sales: s.sales.filter((sale) => !affectedSaleIds.has(sale.id)),
+            movements: s.movements.filter(
+              (m) =>
+                m.stockBatchId !== id &&
+                m.stockBatchId !== matchBatchId &&
+                !(m.referenceId != null && affectedSaleIds.has(m.referenceId))
+            ),
+            purchases: s.purchases.map((p) =>
+              targetBatch && p.id === targetBatch.purchaseLoadId
+                ? { ...p, status: 'PENDING_RECEIVING', stockBatch: null }
+                : p
+            ),
+            syncingCount: s.syncingCount + 1,
+            globalError: null,
+          };
+        });
+
+        const toastId = pushToast('Stock lot deleted & truck reset to pending', 'success');
+        options?.onOptimistic?.();
+
+        try {
+          const realId = await resolveRealId(realOrMappedId, () => get().resolvedIdMap);
+          await api.deleteBatch(realId);
+          options?.onSynced?.();
+          void get().refreshInBackground();
+          get().invalidateDataCache();
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to delete stock lot. Reverted.';
+          get().dismissToast(toastId);
+          if (mutationEpoch === myEpoch) {
+            set({ ...snapshot, globalError: msg });
+          } else {
+            void get().refreshInBackground();
+            get().invalidateDataCache();
+            set({ globalError: msg });
+          }
+          options?.onRollback?.(err);
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    deleteMovement: (id, options) =>
+      mutationGuard.run('deleteMovement', { id }, async () => {
+        const snapshot = takeSnapshot(get());
+        const realOrMappedId = id > 0 ? id : get().resolvedIdMap[id] ?? id;
+        const targetMov = snapshot.movements.find(
+          (m) => m.id === id || m.id === realOrMappedId
+        );
+
+        if (
+          targetMov &&
+          (targetMov.referenceType === 'SALE' || targetMov.referenceType === 'SHOP_DISTRIBUTION') &&
+          targetMov.referenceId
+        ) {
+          return get().deleteSale(targetMov.referenceId, options);
+        }
+
+        if (targetMov && targetMov.referenceType === 'PURCHASE_LOAD') {
+          return get().deleteBatch(targetMov.stockBatchId, options);
+        }
+
+        if (targetMov) {
+          const batch = snapshot.batches.find((b) => b.id === targetMov.stockBatchId);
+          if (batch) {
+            const check = applyMovementDeletionToBatch(batch, targetMov.quantity);
+            if (!check.ok) {
+              pushToast(check.error, 'error');
+              throw new Error(check.error);
+            }
+          }
+        }
+
+        mutationEpoch += 1;
+        const myEpoch = mutationEpoch;
+
+        set((s) => {
+          const mov = s.movements.find((m) => m.id === id || m.id === realOrMappedId);
+          return {
+            movements: s.movements.filter((m) => m.id !== id && m.id !== realOrMappedId),
+            batches: mov
+              ? s.batches.map((b) => {
+                  if (b.id !== mov.stockBatchId) return b;
+                  const rev = applyMovementDeletionToBatch(b, mov.quantity);
+                  return rev.ok ? rev.batch : b;
+                })
+              : s.batches,
+            syncingCount: s.syncingCount + 1,
+            globalError: null,
+          };
+        });
+
+        const toastId = pushToast('Stock movement reversed and removed', 'success');
+        options?.onOptimistic?.();
+
+        try {
+          const realId = await resolveRealId(realOrMappedId, () => get().resolvedIdMap);
+          await api.deleteMovement(realId);
+          options?.onSynced?.();
+          void get().refreshInBackground();
+          get().invalidateDataCache();
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to delete stock movement. Reverted.';
+          get().dismissToast(toastId);
+          if (mutationEpoch === myEpoch) {
+            set({ ...snapshot, globalError: msg });
+          } else {
+            void get().refreshInBackground();
+            get().invalidateDataCache();
+            set({ globalError: msg });
+          }
+          options?.onRollback?.(err);
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    deleteDealerTransaction: (id, options) =>
+      mutationGuard.run('deleteDealerTransaction', { id }, async () => {
+        const snapshot = takeSnapshot(get());
+        const realOrMappedId = id > 0 ? id : get().resolvedIdMap[id] ?? id;
+        const targetEntry = snapshot.dealerTransactions.find(
+          (t) => t.id === id || t.id === realOrMappedId
+        );
+
+        if (targetEntry?.referenceType === 'PURCHASE_LOAD' && targetEntry.referenceId) {
+          return get().deletePurchase(targetEntry.referenceId, options);
+        }
+
+        mutationEpoch += 1;
+        const myEpoch = mutationEpoch;
+
+        set((s) => {
+          const remainingAll = s.dealerTransactions.filter(
+            (t) => t.id !== id && t.id !== realOrMappedId
+          );
+          if (!targetEntry) {
+            return {
+              dealerTransactions: remainingAll,
+              syncingCount: s.syncingCount + 1,
+              globalError: null,
+            };
+          }
+
+          const sup = s.suppliers.find((x) => x.id === targetEntry.supplierId);
+          const nextOpeningBal =
+            targetEntry.referenceType === 'OPENING_BALANCE'
+              ? 0
+              : Number(sup?.openingBalance || 0);
+          const supTxs = remainingAll.filter((t) => t.supplierId === targetEntry.supplierId);
+          const { updated, latestBalance } = recomputeDealerTransactionBalances(
+            supTxs,
+            nextOpeningBal
+          );
+          const balMap = new Map(updated.map((u) => [u.id, u.balanceAfter]));
+
+          return {
+            dealerTransactions: remainingAll.map((t) =>
+              balMap.has(t.id) ? { ...t, balanceAfter: balMap.get(t.id)! } : t
+            ),
+            suppliers: s.suppliers.map((x) =>
+              x.id === targetEntry.supplierId
+                ? {
+                    ...x,
+                    openingBalance:
+                      targetEntry.referenceType === 'OPENING_BALANCE' ? '0.00' : x.openingBalance,
+                    currentBalance: latestBalance,
+                  }
+                : x
+            ),
+            syncingCount: s.syncingCount + 1,
+            globalError: null,
+          };
+        });
+
+        const toastId = pushToast('Dealer ledger entry removed & balance updated', 'success');
+        options?.onOptimistic?.();
+
+        try {
+          const realId = await resolveRealId(realOrMappedId, () => get().resolvedIdMap);
+          await api.deleteDealerTransaction(realId);
+          options?.onSynced?.();
+          void get().refreshInBackground();
+          get().invalidateDataCache();
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to delete ledger entry. Reverted.';
+          get().dismissToast(toastId);
+          if (mutationEpoch === myEpoch) {
+            set({ ...snapshot, globalError: msg });
+          } else {
+            void get().refreshInBackground();
+            get().invalidateDataCache();
+            set({ globalError: msg });
+          }
+          options?.onRollback?.(err);
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    deleteSupplier: (id, options) =>
+      mutationGuard.run('deleteSupplier', { id }, async () => {
+        const snapshot = takeSnapshot(get());
+        const realOrMappedId = id > 0 ? id : get().resolvedIdMap[id] ?? id;
+
+        mutationEpoch += 1;
+        const myEpoch = mutationEpoch;
+
+        set((s) => {
+          const supLoads = s.purchases.filter(
+            (p) => p.supplierId === id || p.supplierId === realOrMappedId
+          );
+          const loadIds = new Set(supLoads.map((l) => l.id));
+          const batchIds = new Set(
+            s.batches.filter((b) => loadIds.has(b.purchaseLoadId)).map((b) => b.id)
+          );
+          const affectedSaleIds = new Set(
+            s.movements
+              .filter(
+                (m) =>
+                  batchIds.has(m.stockBatchId) &&
+                  (m.referenceType === 'SALE' || m.referenceType === 'SHOP_DISTRIBUTION') &&
+                  m.referenceId != null
+              )
+              .map((m) => m.referenceId as number)
+          );
+
+          return {
+            suppliers: s.suppliers.filter((sup) => sup.id !== id && sup.id !== realOrMappedId),
+            purchases: s.purchases.filter((p) => !loadIds.has(p.id)),
+            batches: s.batches.filter((b) => !batchIds.has(b.id)),
+            sales: s.sales.filter((sale) => !affectedSaleIds.has(sale.id)),
+            movements: s.movements.filter(
+              (m) =>
+                !batchIds.has(m.stockBatchId) &&
+                !(m.referenceId != null && affectedSaleIds.has(m.referenceId))
+            ),
+            dealerTransactions: s.dealerTransactions.filter(
+              (t) => t.supplierId !== id && t.supplierId !== realOrMappedId
+            ),
+            syncingCount: s.syncingCount + 1,
+            globalError: null,
+          };
+        });
+
+        const toastId = pushToast('Dealer & all linked loads deleted', 'success');
+        options?.onOptimistic?.();
+
+        try {
+          const realId = await resolveRealId(realOrMappedId, () => get().resolvedIdMap);
+          await api.deleteSupplier(realId);
+          options?.onSynced?.();
+          void get().refreshInBackground();
+          get().invalidateDataCache();
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to delete dealer. Reverted.';
+          get().dismissToast(toastId);
+          if (mutationEpoch === myEpoch) {
+            set({ ...snapshot, globalError: msg });
+          } else {
+            void get().refreshInBackground();
+            get().invalidateDataCache();
+            set({ globalError: msg });
+          }
+          options?.onRollback?.(err);
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    deleteShop: (id, options) =>
+      mutationGuard.run('deleteShop', { id }, async () => {
+        const snapshot = takeSnapshot(get());
+        const realOrMappedId = id > 0 ? id : get().resolvedIdMap[id] ?? id;
+
+        mutationEpoch += 1;
+        const myEpoch = mutationEpoch;
+
+        set((s) => {
+          const linkedSales = s.sales.filter(
+            (sale) => sale.shopId === id || sale.shopId === realOrMappedId
+          );
+          const linkedSaleIds = new Set(linkedSales.map((sale) => sale.id));
+          const restores = s.movements
+            .filter(
+              (m) =>
+                (m.referenceType === 'SALE' || m.referenceType === 'SHOP_DISTRIBUTION') &&
+                m.referenceId != null &&
+                linkedSaleIds.has(m.referenceId)
+            )
+            .map((m) => ({
+              stockBatchId: m.stockBatchId,
+              quantity: Math.abs(m.quantity),
+            }));
+
+          return {
+            shops: s.shops.filter((sh) => sh.id !== id && sh.id !== realOrMappedId),
+            sales: s.sales.filter((sale) => !linkedSaleIds.has(sale.id)),
+            batches: applySaleDeletionToBatches(s.batches, restores),
+            movements: s.movements.filter(
+              (m) => !(m.referenceId != null && linkedSaleIds.has(m.referenceId))
+            ),
+            syncingCount: s.syncingCount + 1,
+            globalError: null,
+          };
+        });
+
+        const toastId = pushToast('Buyer shop & linked deliveries deleted', 'success');
+        options?.onOptimistic?.();
+
+        try {
+          const realId = await resolveRealId(realOrMappedId, () => get().resolvedIdMap);
+          await api.deleteShop(realId);
+          options?.onSynced?.();
+          void get().refreshInBackground();
+          get().invalidateDataCache();
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to delete buyer shop. Reverted.';
+          get().dismissToast(toastId);
+          if (mutationEpoch === myEpoch) {
+            set({ ...snapshot, globalError: msg });
+          } else {
+            void get().refreshInBackground();
+            get().invalidateDataCache();
+            set({ globalError: msg });
+          }
+          options?.onRollback?.(err);
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    deleteWorker: (id, options) =>
+      mutationGuard.run('deleteWorker', { id }, async () => {
+        const snapshot = takeSnapshot(get());
+        const realOrMappedId = id > 0 ? id : get().resolvedIdMap[id] ?? id;
+
+        mutationEpoch += 1;
+        const myEpoch = mutationEpoch;
+
+        set((s) => ({
+          workers: s.workers.filter((w) => w.id !== id && w.id !== realOrMappedId),
+          workerPayments: s.workerPayments.filter(
+            (p) => p.workerId !== id && p.workerId !== realOrMappedId
+          ),
+          syncingCount: s.syncingCount + 1,
+          globalError: null,
+        }));
+
+        const toastId = pushToast('Staff member & wage history deleted', 'success');
+        options?.onOptimistic?.();
+
+        try {
+          const realId = await resolveRealId(realOrMappedId, () => get().resolvedIdMap);
+          await api.deleteWorker(realId);
+          options?.onSynced?.();
+          void get().refreshInBackground();
+          get().invalidateDataCache();
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to delete staff member. Reverted.';
+          get().dismissToast(toastId);
+          if (mutationEpoch === myEpoch) {
+            set({ ...snapshot, globalError: msg });
+          } else {
+            void get().refreshInBackground();
+            get().invalidateDataCache();
+            set({ globalError: msg });
+          }
+          options?.onRollback?.(err);
+          pushToast(msg, 'error');
+          throw err;
+        } finally {
+          set((s) => ({ syncingCount: Math.max(0, s.syncingCount - 1) }));
+        }
+      }),
+
+    deleteWorkerPayment: (id, options) =>
+      mutationGuard.run('deleteWorkerPayment', { id }, async () => {
+        const snapshot = takeSnapshot(get());
+        const realOrMappedId = id > 0 ? id : get().resolvedIdMap[id] ?? id;
+        const targetPmt = snapshot.workerPayments.find(
+          (p) => p.id === id || p.id === realOrMappedId
+        );
+
+        mutationEpoch += 1;
+        const myEpoch = mutationEpoch;
+
+        set((s) => ({
+          workerPayments: s.workerPayments.filter(
+            (p) => p.id !== id && p.id !== realOrMappedId
+          ),
+          workers: targetPmt
+            ? s.workers.map((w) =>
+                w.id === targetPmt.workerId
+                  ? {
+                      ...w,
+                      totalPaid: Math.max(0, (w.totalPaid || 0) - Number(targetPmt.amount)),
+                      paymentCount: Math.max(0, (w.paymentCount || 0) - 1),
+                    }
+                  : w
+              )
+            : s.workers,
+          syncingCount: s.syncingCount + 1,
+          globalError: null,
+        }));
+
+        const toastId = pushToast('Wage payment deleted', 'success');
+        options?.onOptimistic?.();
+
+        try {
+          const realId = await resolveRealId(realOrMappedId, () => get().resolvedIdMap);
+          await api.deleteWorkerPayment(realId);
+          options?.onSynced?.();
+          void get().refreshInBackground();
+          get().invalidateDataCache();
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to delete wage payment. Reverted.';
+          get().dismissToast(toastId);
+          if (mutationEpoch === myEpoch) {
+            set({ ...snapshot, globalError: msg });
+          } else {
+            void get().refreshInBackground();
+            get().invalidateDataCache();
             set({ globalError: msg });
           }
           options?.onRollback?.(err);

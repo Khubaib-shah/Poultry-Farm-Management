@@ -13,6 +13,7 @@ import { DealerTransaction } from '../types/index.ts';
 import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
+import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
 import { formatPKR, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
@@ -43,6 +44,8 @@ export const DealersPage: React.FC<DealersPageProps> = ({
 
   const createSupplier = useAppStore((s) => s.createSupplier);
   const recordSupplierPayment = useAppStore((s) => s.recordSupplierPayment);
+  const deleteSupplier = useAppStore((s) => s.deleteSupplier);
+  const deleteDealerTransaction = useAppStore((s) => s.deleteDealerTransaction);
 
   // Dynamic supplier selection (drives KPI cards + Ledger table together!)
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>(
@@ -331,6 +334,18 @@ export const DealersPage: React.FC<DealersPageProps> = ({
         </span>
       ),
     },
+    {
+      key: 'actions',
+      header: 'Remove',
+      align: 'right',
+      alwaysVisible: true,
+      render: (t) => (
+        <ConfirmDeleteButton
+          ariaLabel={`Delete ledger entry ${t.supplierName || t.id}`}
+          onConfirm={() => deleteDealerTransaction(t.id)}
+        />
+      ),
+    },
   ];
 
   const inputCls =
@@ -581,6 +596,16 @@ export const DealersPage: React.FC<DealersPageProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    <ConfirmDeleteButton
+                      compactSlot
+                      ariaLabel={`Delete dealer ${sup.name}`}
+                      onConfirm={() => {
+                        if (selectedSupplierId === String(sup.id)) {
+                          setSelectedSupplierId('ALL');
+                        }
+                        return deleteSupplier(sup.id);
+                      }}
+                    />
                     <button
                       type="button"
                       onClick={(e) => {
