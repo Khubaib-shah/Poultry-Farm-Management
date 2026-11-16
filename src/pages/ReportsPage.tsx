@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { AnimatePresence, motion } from 'motion/react';
+import { APPLE_BUBBLE_SPRING } from '../utils/appleBubbleMotion.ts';
+import { AppleBubbleButton } from '../components/common/AppleBubbleButton.tsx';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import {
@@ -718,11 +720,14 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             {periodPresets.map((btn) => {
               const active = rangeType === btn.id;
               return (
-                <button
+                <AppleBubbleButton
                   key={btn.id}
                   type="button"
                   onClick={() => handleSelectPreset(btn.id)}
-                  className={`relative px-3 py-1.5 text-[11px] rounded-full font-semibold transition-colors focus:outline-none cursor-pointer whitespace-nowrap shrink-0 ${
+                  hoverScale={1.03}
+                  tapScale={0.9}
+                  rippleClassName="bg-black/[0.06] dark:bg-white/[0.10]"
+                  className={`px-3 py-1.5 text-[11px] rounded-full font-semibold transition-colors focus:outline-none cursor-pointer whitespace-nowrap shrink-0 ${
                     active
                       ? 'text-[#14161A] dark:text-[#F2F4F5]'
                       : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
@@ -731,12 +736,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
                   {active && (
                     <motion.span
                       layoutId="reportsPeriodPill"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      transition={APPLE_BUBBLE_SPRING}
                       className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
                     />
                   )}
                   <span className="relative z-10">{btn.label}</span>
-                </button>
+                </AppleBubbleButton>
               );
             })}
           </div>
@@ -1052,11 +1057,14 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             const Icon = tab.icon;
             const active = activeDetailTab === tab.id;
             return (
-              <button
+              <AppleBubbleButton
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveDetailTab(tab.id)}
-                className={`relative px-3.5 py-2 rounded-full text-xs font-semibold transition-colors focus:outline-none flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+                hoverScale={1.03}
+                tapScale={0.9}
+                rippleClassName="bg-black/[0.06] dark:bg-white/[0.10]"
+                className={`px-3.5 py-2 rounded-full text-xs font-semibold transition-colors focus:outline-none flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
                   active
                     ? 'text-[#14161A] dark:text-[#F2F4F5]'
                     : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
@@ -1065,7 +1073,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
                 {active && (
                   <motion.span
                     layoutId="reportsDetailPill"
-                    transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                    transition={APPLE_BUBBLE_SPRING}
                     className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
                   />
                 )}
@@ -1075,7 +1083,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
                     {tab.label} ({isInitialLoading ? '...' : tab.count})
                   </span>
                 </span>
-              </button>
+              </AppleBubbleButton>
             );
           })}
         </div>

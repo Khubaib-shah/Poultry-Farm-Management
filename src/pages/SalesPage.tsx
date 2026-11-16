@@ -11,6 +11,8 @@ import {
   Check,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { APPLE_BUBBLE_SPRING } from '../utils/appleBubbleMotion.ts';
+import { AppleBubbleButton } from '../components/common/AppleBubbleButton.tsx';
 import { Sale } from '../types/index.ts';
 import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
@@ -552,21 +554,26 @@ export const SalesPage: React.FC<SalesPageProps> = ({
         </div>
 
         <div className="grid grid-cols-2 sm:flex sm:items-center sm:justify-end gap-2.5 w-full xl:w-auto xl:ml-auto">
-          <button
+          <AppleBubbleButton
             type="button"
             onClick={() => setIsNewShopOpen(true)}
-            className="min-h-[40px] inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] text-[#14161A] dark:text-[#F2F4F5] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] transition whitespace-nowrap shrink-0 cursor-pointer"
+            hoverScale={1.03}
+            tapScale={0.9}
+            className="min-h-[40px] inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] text-[#14161A] dark:text-[#F2F4F5] hover:bg-[#F3F5F6] dark:hover:bg-[#20242A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            + Add Buyer Shop
-          </button>
-          <button
+            <span className="relative z-10">+ Add Buyer Shop</span>
+          </AppleBubbleButton>
+          <AppleBubbleButton
             type="button"
             onClick={() => openDeliveryModalForShop()}
-            className="min-h-[40px] inline-flex items-center justify-center px-4 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
+            hoverScale={1.03}
+            tapScale={0.9}
+            rippleClassName="bg-black/[0.08]"
+            className="min-h-[40px] inline-flex items-center justify-center px-4 py-2 text-xs font-bold rounded-full bg-[#D4F56B] text-[#14161A] hover:bg-[#C9EE55] transition-colors shadow-none whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <Plus className="w-4 h-4 mr-1.5" />
-            New Shop Delivery
-          </button>
+            <Plus className="relative z-10 w-4 h-4 mr-1.5" />
+            <span className="relative z-10">New Shop Delivery</span>
+          </AppleBubbleButton>
         </div>
       </div>
 
@@ -685,11 +692,14 @@ export const SalesPage: React.FC<SalesPageProps> = ({
           const Icon = tab.icon;
           const active = activeTab === tab.id;
           return (
-            <button
+            <AppleBubbleButton
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`relative px-4 py-2 text-xs font-semibold rounded-full transition-colors focus:outline-none flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 ${
+              hoverScale={1.03}
+              tapScale={0.9}
+              rippleClassName="bg-black/[0.06] dark:bg-white/[0.10]"
+              className={`px-4 py-2 text-xs font-semibold rounded-full transition-colors focus:outline-none flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 ${
                 active
                   ? 'text-[#14161A] dark:text-[#F2F4F5]'
                   : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
@@ -698,7 +708,7 @@ export const SalesPage: React.FC<SalesPageProps> = ({
               {active && (
                 <motion.span
                   layoutId="salesTabPill"
-                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                  transition={APPLE_BUBBLE_SPRING}
                   className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
                 />
               )}
@@ -706,7 +716,7 @@ export const SalesPage: React.FC<SalesPageProps> = ({
                 <Icon className="w-3.5 h-3.5" />
                 <span>{tab.label}</span>
               </span>
-            </button>
+            </AppleBubbleButton>
           );
         })}
       </div>

@@ -1,6 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  APPLE_BUBBLE_SPRING,
+  APPLE_EASE_OUT,
+  APPLE_TAP_SPRING,
+} from '../../utils/appleBubbleMotion.ts';
 
 interface ConfirmDeleteButtonProps {
   onConfirm: () => Promise<void> | void;
@@ -12,15 +17,6 @@ interface ConfirmDeleteButtonProps {
   compactSlot?: boolean;
   className?: string;
 }
-
-const APPLE_BUBBLE_SPRING = {
-  type: 'spring',
-  stiffness: 460,
-  damping: 24,
-  mass: 0.72,
-} as const;
-
-const APPLE_EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
 export const ConfirmDeleteButton: React.FC<ConfirmDeleteButtonProps> = ({
   onConfirm,
@@ -99,19 +95,19 @@ export const ConfirmDeleteButton: React.FC<ConfirmDeleteButtonProps> = ({
       }
       transition={{
         width: APPLE_BUBBLE_SPRING,
-        scale: { type: 'spring', stiffness: 480, damping: 20, mass: 0.68 },
+        scale: APPLE_TAP_SPRING,
       }}
       className={`relative h-[32px] overflow-hidden inline-flex items-center justify-center rounded-full text-[11px] font-bold shrink-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap select-none transition-colors duration-200 ${
         label ? 'px-3.5' : ''
       } ${
         confirming
-          ? 'text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(225,29,72,0.34)]'
+          ? 'text-white shadow-[0_1px_2px_rgba(225,29,72,0.14)] dark:shadow-none'
           : label
-          ? 'border border-rose-200 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-500/5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/15'
-          : 'bg-[#F3F5F6] dark:bg-[#22262C] border border-[#E3E6E8]/90 dark:border-[#323842] text-[#636B76] dark:text-[#98A0AB] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/15 hover:border-rose-200 dark:hover:border-rose-500/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_1px_2px_rgba(20,22,26,0.05)] dark:shadow-none'
+          ? 'border border-rose-200 dark:border-rose-500/30 bg-rose-50/60 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/15 shadow-none'
+          : 'bg-[#EDEEEF] dark:bg-[#22262C] border border-[#E3E6E8]/90 dark:border-[#323842] text-[#636B76] dark:text-[#98A0AB] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/15 hover:border-rose-200 dark:hover:border-rose-500/30 shadow-none'
       } ${className}`}
     >
-      {/* Apple Liquid Glass Rose Capsule */}
+      {/* Crisp Rose Capsule */}
       <AnimatePresence initial={false}>
         {confirming && (
           <motion.span
@@ -120,22 +116,22 @@ export const ConfirmDeleteButton: React.FC<ConfirmDeleteButtonProps> = ({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.72 }}
             transition={APPLE_BUBBLE_SPRING}
-            className="absolute inset-0 rounded-full bg-gradient-to-b from-rose-500 to-rose-600 ring-1 ring-inset ring-white/30 z-0"
+            className="absolute inset-0 rounded-full bg-rose-600 dark:bg-rose-500 z-0"
           />
         )}
       </AnimatePresence>
 
-      {/* Bubble Pulse Ripple on Tap */}
+      {/* Subtle Bubble Pulse Ripple on Tap */}
       <AnimatePresence>
         {rippleKey > 0 && (
           <motion.span
             key={`ripple-${rippleKey}`}
-            initial={{ opacity: 0.45, scale: 0.55 }}
-            animate={{ opacity: 0, scale: 1.55 }}
+            initial={{ opacity: 0.3, scale: 0.6 }}
+            animate={{ opacity: 0, scale: 1.45 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.38, ease: APPLE_EASE_OUT }}
+            transition={{ duration: 0.36, ease: APPLE_EASE_OUT }}
             className={`pointer-events-none absolute inset-0 rounded-full z-0 ${
-              confirming ? 'bg-white/40' : 'bg-rose-400/30'
+              confirming ? 'bg-white/30' : 'bg-rose-400/25'
             }`}
           />
         )}

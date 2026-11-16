@@ -1,6 +1,8 @@
 import React, { useId } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
+import { APPLE_BUBBLE_SPRING } from '../../utils/appleBubbleMotion.ts';
+import { AppleBubbleButton } from './AppleBubbleButton.tsx';
 import {
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
@@ -86,16 +88,18 @@ export const Pagination: React.FC<PaginationProps> = ({
 
       {/* Right: Prev / Page Numbers / Next */}
       <div className="flex items-center justify-between sm:justify-end gap-1.5">
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={() => onPageChange(meta.currentPage - 1)}
           disabled={!meta.canPrev}
           aria-label="Previous page"
-          className="min-h-[34px] px-2.5 sm:px-3 py-1 rounded-[10px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] text-[#14161A] dark:text-[#F2F4F5] font-semibold inline-flex items-center gap-1 hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          hoverScale={1.03}
+          tapScale={0.9}
+          className="min-h-[34px] px-2.5 sm:px-3 py-1 rounded-[10px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] text-[#14161A] dark:text-[#F2F4F5] font-semibold inline-flex items-center gap-1 hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
         >
-          <ChevronLeft className="w-3.5 h-3.5" />
-          <span>Prev</span>
-        </button>
+          <ChevronLeft className="relative z-10 w-3.5 h-3.5" />
+          <span className="relative z-10">Prev</span>
+        </AppleBubbleButton>
 
         {/* Desktop / Tablet numbered page pills */}
         <div className="hidden sm:flex items-center gap-1">
@@ -108,13 +112,15 @@ export const Pagination: React.FC<PaginationProps> = ({
                 …
               </span>
             ) : (
-              <button
+              <AppleBubbleButton
                 key={entry}
                 type="button"
                 onClick={() => onPageChange(entry)}
                 aria-label={`Page ${entry}`}
                 aria-current={entry === meta.currentPage ? 'page' : undefined}
-                className={`relative min-w-[34px] min-h-[34px] px-2 rounded-full font-mono font-bold tabular-nums transition-colors cursor-pointer ${
+                hoverScale={1.06}
+                tapScale={0.86}
+                className={`min-w-[34px] min-h-[34px] px-2 rounded-full font-mono font-bold tabular-nums transition-colors cursor-pointer inline-flex items-center justify-center ${
                   entry === meta.currentPage
                     ? 'text-[#14161A]'
                     : 'text-[#4A515B] dark:text-[#A3AAB3] hover:bg-[#EDEEEF] dark:hover:bg-[#272C33]'
@@ -123,12 +129,12 @@ export const Pagination: React.FC<PaginationProps> = ({
                 {entry === meta.currentPage && (
                   <motion.span
                     layoutId={`paginationActivePill-${pillId}`}
-                    transition={{ type: 'spring', stiffness: 460, damping: 24, mass: 0.72 }}
-                    className="absolute inset-0 rounded-full bg-[#D4F56B] shadow-xs z-0"
+                    transition={APPLE_BUBBLE_SPRING}
+                    className="absolute inset-0 rounded-full bg-[#D4F56B] z-0"
                   />
                 )}
                 <span className="relative z-10">{entry}</span>
-              </button>
+              </AppleBubbleButton>
             )
           )}
         </div>
@@ -138,16 +144,18 @@ export const Pagination: React.FC<PaginationProps> = ({
           Page {meta.currentPage} / {meta.totalPages}
         </span>
 
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={() => onPageChange(meta.currentPage + 1)}
           disabled={!meta.canNext}
           aria-label="Next page"
-          className="min-h-[34px] px-2.5 sm:px-3 py-1 rounded-[10px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] text-[#14161A] dark:text-[#F2F4F5] font-semibold inline-flex items-center gap-1 hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          hoverScale={1.03}
+          tapScale={0.9}
+          className="min-h-[34px] px-2.5 sm:px-3 py-1 rounded-[10px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] text-[#14161A] dark:text-[#F2F4F5] font-semibold inline-flex items-center gap-1 hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
         >
-          <span>Next</span>
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+          <span className="relative z-10">Next</span>
+          <ChevronRight className="relative z-10 w-3.5 h-3.5" />
+        </AppleBubbleButton>
       </div>
     </div>
   );

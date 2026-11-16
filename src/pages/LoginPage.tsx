@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext.tsx';
 import { api } from '../services/api.ts';
 import { AuthUser } from '../types/index.ts';
 import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
+import { AppleBubbleButton } from '../components/common/AppleBubbleButton.tsx';
 
 interface LoginPageProps {
   onLoginSuccess: (user: AuthUser) => void;
@@ -62,15 +63,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-screen bg-[#F2F4F4] dark:bg-[#0F1113] text-[#14161A] dark:text-[#F2F4F5] flex items-center justify-center p-4 sm:p-6 lg:p-10 relative transition-colors duration-200 selection:bg-[#D4F56B] selection:text-[#14161A]">
       {/* Theme Toggle */}
-      <button
+      <AppleBubbleButton
         type="button"
         onClick={toggleTheme}
         aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
         title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-        className="fixed top-4 right-4 sm:top-6 sm:right-6 z-30 w-10 h-10 rounded-[14px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-xs flex items-center justify-center text-[#14161A] dark:text-[#F6E7A1] hover:border-[#D7DBDF] dark:hover:border-[#373E47] active:scale-95 transition cursor-pointer"
+        hoverScale={1.06}
+        tapScale={0.86}
+        className="!fixed top-4 right-4 sm:top-6 sm:right-6 z-30 w-10 h-10 rounded-[14px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04)] flex items-center justify-center text-[#14161A] dark:text-[#F6E7A1] hover:border-[#D7DBDF] dark:hover:border-[#373E47] transition-colors cursor-pointer"
       >
-        {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-      </button>
+        {theme === 'dark' ? <Sun className="relative z-10 w-4 h-4" /> : <Moon className="relative z-10 w-4 h-4" />}
+      </AppleBubbleButton>
 
       {/* Main Split Card Container (larger overall width & height) */}
       <div className="w-full max-w-[1200px] lg:min-h-[680px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[28px] sm:rounded-[34px] p-4 sm:p-6 lg:p-7 shadow-[0_12px_40px_rgba(20,22,26,0.07)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.48)] grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch relative overflow-hidden">
@@ -217,13 +220,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
               )}
 
-              <button
+              <AppleBubbleButton
                 type="submit"
                 disabled={isBusy}
-                className="w-full h-[52px] mt-1 rounded-[14px] bg-[#D4F56B] hover:bg-[#C9EE55] disabled:opacity-60 disabled:cursor-not-allowed text-[#14161A] font-bold text-sm tracking-wide shadow-xs dark:shadow-none active:scale-[0.99] transition cursor-pointer"
+                hoverScale={1.015}
+                tapScale={0.94}
+                rippleClassName="bg-black/[0.08]"
+                className="w-full h-[52px] mt-1 rounded-[14px] bg-[#D4F56B] hover:bg-[#C9EE55] disabled:opacity-60 disabled:cursor-not-allowed text-[#14161A] font-bold text-sm tracking-wide shadow-none transition-colors cursor-pointer flex items-center justify-center"
               >
-                {isSubmitting ? 'Logging in...' : 'Login'}
-              </button>
+                <span className="relative z-10">{isSubmitting ? 'Logging in...' : 'Login'}</span>
+              </AppleBubbleButton>
             </form>
 
             {/* Quick Demo Divider & Action */}
@@ -233,16 +239,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <div className="h-px flex-1 bg-[#E3E6E8] dark:bg-[#2A2F35]" />
             </div>
 
-            <button
+            <AppleBubbleButton
               type="button"
               onClick={handleViewDemo}
               disabled={isBusy}
               aria-busy={isStartingDemo}
-              className="w-full h-[48px] rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#1F2328] hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] disabled:opacity-60 disabled:cursor-not-allowed text-[#14161A] dark:text-[#F2F4F5] font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.99] transition cursor-pointer"
+              hoverScale={1.015}
+              tapScale={0.94}
+              className="w-full h-[48px] rounded-[14px] border border-[#E3E6E8] dark:border-[#2A2F35] bg-[#F8F9FA] dark:bg-[#1F2328] hover:bg-[#EDEEEF] dark:hover:bg-[#272C33] disabled:opacity-60 disabled:cursor-not-allowed text-[#14161A] dark:text-[#F2F4F5] font-semibold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
-              <Play className="w-4 h-4 text-[#17807D] dark:text-[#D4F56B]" />
-              <span>{isStartingDemo ? 'Preparing 6-Month Demo...' : 'View Demo'}</span>
-            </button>
+              <Play className="relative z-10 w-4 h-4 text-[#17807D] dark:text-[#D4F56B]" />
+              <span className="relative z-10">{isStartingDemo ? 'Preparing 6-Month Demo...' : 'View Demo'}</span>
+            </AppleBubbleButton>
             <p className="mt-2 text-center text-[11px] text-[#636B76] dark:text-[#8A929C]">
               Explore an isolated demo workspace with 6 months of sample shop data
             </p>

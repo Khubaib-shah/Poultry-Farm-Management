@@ -22,6 +22,8 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { useTheme } from '../../context/ThemeContext.tsx';
 import { getLocalPakistanDate } from '../../utils/syncCalculations.ts';
+import { APPLE_BUBBLE_SPRING } from '../../utils/appleBubbleMotion.ts';
+import { AppleBubbleButton } from '../common/AppleBubbleButton.tsx';
 import { PWAInstallButton } from '../common/PWAInstallButton.tsx';
 import { AuthUser } from '../../types/index.ts';
 
@@ -134,32 +136,37 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
       <div className="hidden xl:flex fixed top-5 inset-x-0 px-5 z-40 items-center justify-between gap-3 pointer-events-none">
         <div className="flex items-center gap-3 min-w-0 pointer-events-auto">
           {/* 1. DESKTOP TOP-LEFT LOGO TILE */}
-          <button
+          <AppleBubbleButton
             type="button"
             onClick={() => onSelectTab('dashboard')}
             aria-label="Go to Overview"
-            className="w-[52px] h-[52px] shrink-0 rounded-[18px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center justify-center p-1 transition-transform hover:scale-105 cursor-pointer"
+            hoverScale={1.05}
+            tapScale={0.9}
+            className="w-[52px] h-[52px] shrink-0 rounded-[18px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)] flex items-center justify-center p-1 cursor-pointer"
           >
             <img
               src="/assets/aistudio/check-in_ceb7ef49.webp"
               alt="Al-Madina Poultry Logo"
-              className="w-full h-full rounded-[13px] object-cover bg-[#F3F3F3]"
+              className="relative z-10 w-full h-full rounded-[13px] object-cover bg-[#F3F3F3]"
             />
-          </button>
+          </AppleBubbleButton>
 
           {/* 2. DESKTOP FLOATING NAV PILL */}
           <nav
             aria-label="Primary Navigation"
-            className="h-12 shrink-0 rounded-full p-1 bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center gap-0.5"
+            className="h-12 shrink-0 rounded-full p-1 bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)] flex items-center gap-0.5"
           >
             {primaryNavTabs.map((tab) => {
               const isActive = currentTab === tab.key;
               return (
-                <button
+                <AppleBubbleButton
                   key={tab.key}
                   type="button"
                   onClick={() => onSelectTab(tab.key)}
-                  className={`relative px-2.5 2xl:px-3.5 h-[38px] rounded-full text-[11px] font-bold tracking-[0.06em] 2xl:tracking-[0.07em] uppercase transition-colors duration-150 flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                  hoverScale={1.03}
+                  tapScale={0.9}
+                  rippleClassName="bg-black/[0.06] dark:bg-white/[0.10]"
+                  className={`px-2.5 2xl:px-3.5 h-[38px] rounded-full text-[11px] font-bold tracking-[0.06em] 2xl:tracking-[0.07em] uppercase transition-colors duration-150 flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
                     isActive
                       ? 'text-[#14161A] dark:text-[#F2F4F5]'
                       : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
@@ -168,17 +175,17 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                   {isActive && (
                     <motion.span
                       layoutId="desktopNavPill"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] -z-10"
+                      transition={APPLE_BUBBLE_SPRING}
+                      className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
                     />
                   )}
-                  <span>{tab.label}</span>
+                  <span className="relative z-10">{tab.label}</span>
                   {tab.badge !== undefined && (
-                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#D4F56B] text-[#14161A] font-mono leading-none">
+                    <span className="relative z-10 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#D4F56B] text-[#14161A] font-mono leading-none">
                       {tab.badge}
                     </span>
                   )}
-                </button>
+                </AppleBubbleButton>
               );
             })}
           </nav>
@@ -195,36 +202,41 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
               <span>DEMO MODE</span>
             </div>
           ) : (
-            <div className="hidden 2xl:flex h-10 px-3.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] items-center gap-2 text-[11px] font-bold tracking-[0.08em] uppercase text-[#4A515B] dark:text-[#A3AAB3] whitespace-nowrap">
+            <div className="hidden 2xl:flex h-10 px-3.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)] items-center gap-2 text-[11px] font-bold tracking-[0.08em] uppercase text-[#4A515B] dark:text-[#A3AAB3] whitespace-nowrap">
               <span>Khubaib Shah</span>
             </div>
           )}
 
           <PWAInstallButton variant="pill" />
 
-          <button
+          <AppleBubbleButton
             type="button"
             onClick={() => onQuickAction('new-sale')}
-            className="h-10 px-3.5 2xl:px-4 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] font-bold text-xs tracking-wider uppercase flex items-center gap-1.5 transition-all duration-150 transform active:scale-95 shadow-[0_2px_8px_rgba(212,245,107,0.4)] whitespace-nowrap cursor-pointer"
+            hoverScale={1.03}
+            tapScale={0.9}
+            rippleClassName="bg-black/[0.08]"
+            className="h-10 px-3.5 2xl:px-4 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] font-bold text-xs tracking-wider uppercase flex items-center gap-1.5 transition-colors duration-150 shadow-[0_1px_2px_rgba(20,22,26,0.06)] dark:shadow-none whitespace-nowrap cursor-pointer"
           >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>QUICK SALE</span>
-          </button>
+            <Plus className="relative z-10 w-4 h-4 stroke-[2.5]" />
+            <span className="relative z-10">QUICK SALE</span>
+          </AppleBubbleButton>
 
           <div className="relative">
-            <button
+            <AppleBubbleButton
               type="button"
               onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-              className="h-10 px-2.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center gap-2 hover:border-[#D7DBDF] dark:hover:border-[#373E47] focus:outline-none transition whitespace-nowrap cursor-pointer"
+              hoverScale={1.02}
+              tapScale={0.92}
+              className="h-10 px-2.5 rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] bg-white dark:bg-[#181B1F] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)] flex items-center gap-2 hover:border-[#D7DBDF] dark:hover:border-[#373E47] focus:outline-none transition-colors whitespace-nowrap cursor-pointer"
             >
-              <div className="w-6 h-6 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5] flex items-center justify-center">
+              <div className="relative z-10 w-6 h-6 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] text-[#14161A] dark:text-[#F2F4F5] flex items-center justify-center">
                 <User className="w-3.5 h-3.5" />
               </div>
-              <span className="text-xs font-semibold text-[#14161A] dark:text-[#F2F4F5] max-w-[110px] truncate">
+              <span className="relative z-10 text-xs font-semibold text-[#14161A] dark:text-[#F2F4F5] max-w-[110px] truncate">
                 {businessName.split(' ')[0] || 'Al-Madina'}
               </span>
-              <ChevronDown className="w-3 h-3 text-[#636B76]" />
-            </button>
+              <ChevronDown className="relative z-10 w-3 h-3 text-[#636B76]" />
+            </AppleBubbleButton>
 
             <AnimatePresence>
               {profileDropdownOpen && (
@@ -299,109 +311,123 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
       </div>
 
       {/* 4. DESKTOP FLOATING VERTICAL LEFT RAIL */}
-      <div className="hidden xl:flex fixed top-28 left-5 z-40 flex-col items-center w-[52px] p-1.5 gap-1.5 bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)]">
+      <div className="hidden xl:flex fixed top-28 left-5 z-40 flex-col items-center w-[52px] p-1.5 gap-1.5 bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] rounded-[20px] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)]">
         {allModules.slice(0, 6).map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.key;
           return (
-            <button
+            <AppleBubbleButton
               key={item.key}
               type="button"
               onClick={() => onSelectTab(item.key)}
               title={item.label}
-              className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition-all duration-150 transform hover:scale-105 active:scale-95 group relative cursor-pointer ${
+              hoverScale={1.06}
+              tapScale={0.86}
+              className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition-colors duration-150 group cursor-pointer ${
                 isActive
-                  ? 'bg-[#D4F56B] text-[#14161A] shadow-xs'
+                  ? 'bg-[#D4F56B] text-[#14161A]'
                   : 'text-[#4A515B] dark:text-[#A3AAB3] hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] hover:text-[#14161A] dark:hover:text-white'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              <span className="opacity-0 group-hover:opacity-100 transition absolute left-14 z-50 bg-[#14161A] text-white text-[11px] font-medium px-2.5 py-1 rounded-lg whitespace-nowrap shadow-md pointer-events-none">
+              <Icon className="relative z-10 w-4 h-4" />
+              <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-14 z-50 bg-[#14161A] text-white text-[11px] font-medium px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm pointer-events-none">
                 {item.label}
               </span>
-            </button>
+            </AppleBubbleButton>
           );
         })}
 
         <div className="w-6 h-px bg-[#E3E6E8] dark:bg-[#2A2F35] my-0.5" />
 
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={() => onSelectTab('settings')}
           title="Settings"
-          className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition cursor-pointer group relative ${
+          hoverScale={1.06}
+          tapScale={0.86}
+          className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition-colors cursor-pointer group ${
             currentTab === 'settings'
-              ? 'bg-[#D4F56B] text-[#14161A] shadow-xs'
+              ? 'bg-[#D4F56B] text-[#14161A]'
               : 'text-[#4A515B] dark:text-[#A3AAB3] hover:bg-[#F3F5F6] dark:hover:bg-[#1F2328] hover:text-[#14161A] dark:hover:text-white'
           }`}
         >
-          <Settings className="w-4 h-4" />
-          <span className="opacity-0 group-hover:opacity-100 transition absolute left-14 z-50 bg-[#14161A] text-white text-[11px] font-medium px-2.5 py-1 rounded-lg whitespace-nowrap shadow-md pointer-events-none">
+          <Settings className="relative z-10 w-4 h-4" />
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-14 z-50 bg-[#14161A] text-white text-[11px] font-medium px-2.5 py-1 rounded-lg whitespace-nowrap shadow-sm pointer-events-none">
             Settings
           </span>
-        </button>
+        </AppleBubbleButton>
       </div>
 
       {/* 5. DESKTOP BOTTOM-LEFT CONTROLS */}
       <div className="hidden xl:flex fixed bottom-5 left-5 z-40 flex-col gap-2.5">
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={toggleTheme}
           title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          className="w-[52px] h-[52px] rounded-[20px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center justify-center text-[#14161A] dark:text-[#F2F4F5] hover:scale-105 active:scale-95 transition cursor-pointer"
+          hoverScale={1.06}
+          tapScale={0.86}
+          className="w-[52px] h-[52px] rounded-[20px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)] flex items-center justify-center text-[#14161A] dark:text-[#F2F4F5] cursor-pointer"
         >
           {theme === 'dark' ? (
-            <Sun className="w-5 h-5 text-[#F6E7A1]" />
+            <Sun className="relative z-10 w-5 h-5 text-[#F6E7A1]" />
           ) : (
-            <Moon className="w-5 h-5 text-[#14161A]" />
+            <Moon className="relative z-10 w-5 h-5 text-[#14161A]" />
           )}
-        </button>
+        </AppleBubbleButton>
 
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={() => setHelpModalOpen(true)}
           title="Quick Guide"
-          className="w-[52px] h-[52px] rounded-[20px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] flex items-center justify-center text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white hover:scale-105 active:scale-95 transition cursor-pointer"
+          hoverScale={1.06}
+          tapScale={0.86}
+          className="w-[52px] h-[52px] rounded-[20px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)] flex items-center justify-center text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white cursor-pointer"
         >
-          <HelpCircle className="w-5 h-5" />
-        </button>
+          <HelpCircle className="relative z-10 w-5 h-5" />
+        </AppleBubbleButton>
       </div>
 
       {/* 6. MOBILE & TABLET FLOATING BUTTON HEADER (< xl) */}
       <header className="xl:hidden px-4 sm:px-6 pt-4 pb-0 space-y-3 sm:space-y-4">
         {/* Top Row: Backgroundless floating icon buttons (Logo left, + & Menu right) */}
         <div className="flex items-center justify-between">
-          <button
+          <AppleBubbleButton
             type="button"
             onClick={() => onSelectTab('dashboard')}
             aria-label="Al-Madina Poultry Home"
-            className="w-11 h-11 rounded-[16px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.06)] flex items-center justify-center p-1 active:scale-95 transition cursor-pointer"
+            hoverScale={1.04}
+            tapScale={0.88}
+            className="w-11 h-11 rounded-[16px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)] flex items-center justify-center p-1 cursor-pointer"
           >
             <img
               src="/assets/aistudio/check-in_ceb7ef49.webp"
               alt="Al-Madina Poultry Logo"
-              className="w-full h-full rounded-[11px] object-cover bg-[#F3F3F3]"
+              className="relative z-10 w-full h-full rounded-[11px] object-cover bg-[#F3F3F3]"
             />
-          </button>
+          </AppleBubbleButton>
 
           <div className="flex items-center gap-2">
             <PWAInstallButton variant="mobile-icon" />
-            <button
+            <AppleBubbleButton
               type="button"
               onClick={() => onQuickAction('new-sale')}
               aria-label="Quick Sale"
-              className="w-11 h-11 rounded-full bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.06)] flex items-center justify-center text-[#14161A] dark:text-white active:scale-95 transition cursor-pointer"
+              hoverScale={1.05}
+              tapScale={0.88}
+              className="w-11 h-11 rounded-full bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)] flex items-center justify-center text-[#14161A] dark:text-white cursor-pointer"
             >
-              <Plus className="w-5 h-5 stroke-[2]" />
-            </button>
-            <button
+              <Plus className="relative z-10 w-5 h-5 stroke-[2]" />
+            </AppleBubbleButton>
+            <AppleBubbleButton
               type="button"
               onClick={() => setMobileDrawerOpen(true)}
               aria-label="Open All Menu Sections"
-              className="w-11 h-11 rounded-full bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.06)] flex items-center justify-center text-[#14161A] dark:text-white active:scale-95 transition cursor-pointer"
+              hoverScale={1.05}
+              tapScale={0.88}
+              className="w-11 h-11 rounded-full bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_6px_18px_rgba(20,22,26,0.05)] flex items-center justify-center text-[#14161A] dark:text-white cursor-pointer"
             >
-              <Menu className="w-5 h-5" />
-            </button>
+              <Menu className="relative z-10 w-5 h-5" />
+            </AppleBubbleButton>
           </div>
         </div>
 
@@ -424,25 +450,29 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
+            <AppleBubbleButton
               type="button"
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              className="w-10 h-10 rounded-[14px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-xs flex items-center justify-center text-[#14161A] dark:text-[#F6E7A1] active:scale-95 transition cursor-pointer"
+              hoverScale={1.05}
+              tapScale={0.88}
+              className="w-10 h-10 rounded-[14px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04)] flex items-center justify-center text-[#14161A] dark:text-[#F6E7A1] cursor-pointer"
             >
-              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-            <button
+              {theme === 'dark' ? <Sun className="relative z-10 w-4 h-4" /> : <Moon className="relative z-10 w-4 h-4" />}
+            </AppleBubbleButton>
+            <AppleBubbleButton
               type="button"
               onClick={() => onSelectTab('trucks-stock')}
               aria-label="Check Truck Arrivals"
-              className="relative w-10 h-10 rounded-[14px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-xs flex items-center justify-center text-[#14161A] dark:text-white active:scale-95 transition cursor-pointer"
+              hoverScale={1.05}
+              tapScale={0.88}
+              className="w-10 h-10 rounded-[14px] bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04)] flex items-center justify-center text-[#14161A] dark:text-white cursor-pointer"
             >
-              <Truck className="w-4 h-4" />
+              <Truck className="relative z-10 w-4 h-4" />
               {pendingLoadsCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-[#F2F4F4] dark:ring-[#0F1113]" />
+                <span className="absolute -top-0.5 -right-0.5 z-20 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-[#F2F4F4] dark:ring-[#0F1113]" />
               )}
-            </button>
+            </AppleBubbleButton>
           </div>
         </div>
       </header>
@@ -450,20 +480,22 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
       {/* 7. MOBILE BOTTOM FLOATING PILL NAV (< xl) */}
       <nav
         aria-label="Mobile Bottom Navigation"
-        className="xl:hidden fixed bottom-3.5 inset-x-0 mx-auto w-[min(92%,380px)] h-16 bg-white/95 dark:bg-[#181B1F]/95 backdrop-blur-md rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_8px_30px_rgba(20,22,26,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.45)] px-3 flex items-center justify-between z-40"
+        className="xl:hidden fixed bottom-3.5 inset-x-0 mx-auto w-[min(92%,380px)] h-16 bg-white/95 dark:bg-[#181B1F]/95 backdrop-blur-md rounded-full border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_8px_28px_rgba(20,22,26,0.1)] dark:shadow-[0_8px_28px_rgba(0,0,0,0.42)] px-3 flex items-center justify-between z-40"
       >
         {/* Tab 1: Dashboard */}
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={() => onSelectTab('dashboard')}
           aria-label="Overview"
-          className="relative w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+          hoverScale={1.04}
+          tapScale={0.86}
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
         >
           {currentTab === 'dashboard' && (
             <motion.span
               layoutId="mobileNavActive"
-              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-              className="absolute inset-0 rounded-full bg-[#F3F5F6] dark:bg-[#272C33]"
+              transition={APPLE_BUBBLE_SPRING}
+              className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33]"
             />
           )}
           <LayoutDashboard
@@ -473,20 +505,22 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                 : 'text-[#636B76] dark:text-[#8A929C]'
             }`}
           />
-        </button>
+        </AppleBubbleButton>
 
         {/* Tab 2: Trucks & Stock (with electric-lime count badge) */}
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={() => onSelectTab('trucks-stock')}
           aria-label="Trucks & Stock"
-          className="relative w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+          hoverScale={1.04}
+          tapScale={0.86}
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
         >
           {currentTab === 'trucks-stock' && (
             <motion.span
               layoutId="mobileNavActive"
-              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-              className="absolute inset-0 rounded-full bg-[#F3F5F6] dark:bg-[#272C33]"
+              transition={APPLE_BUBBLE_SPRING}
+              className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33]"
             />
           )}
           <Truck
@@ -497,34 +531,39 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
             }`}
           />
           {pendingLoadsCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 z-20 min-w-[18px] h-[18px] px-1 rounded-full bg-[#D4F56B] text-[#14161A] text-[10px] font-black flex items-center justify-center leading-none shadow-xs">
+            <span className="absolute top-1.5 right-1.5 z-20 min-w-[18px] h-[18px] px-1 rounded-full bg-[#D4F56B] text-[#14161A] text-[10px] font-black flex items-center justify-center leading-none">
               {pendingLoadsCount}
             </span>
           )}
-        </button>
+        </AppleBubbleButton>
 
         {/* Center: Flush Electric Lime + Button */}
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={() => onQuickAction('new-sale')}
           aria-label="New Quick Sale"
-          className="w-12 h-12 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] flex items-center justify-center shadow-[0_2px_10px_rgba(212,245,107,0.45)] active:scale-90 transition-transform cursor-pointer"
+          hoverScale={1.06}
+          tapScale={0.86}
+          rippleClassName="bg-black/[0.08]"
+          className="w-12 h-12 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] flex items-center justify-center shadow-[0_1px_3px_rgba(20,22,26,0.08)] dark:shadow-none cursor-pointer"
         >
-          <Plus className="w-6 h-6 stroke-[2.3]" />
-        </button>
+          <Plus className="relative z-10 w-6 h-6 stroke-[2.3]" />
+        </AppleBubbleButton>
 
         {/* Tab 4: Shop Sales */}
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={() => onSelectTab('sales')}
           aria-label="Shop Sales"
-          className="relative w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+          hoverScale={1.04}
+          tapScale={0.86}
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
         >
           {currentTab === 'sales' && (
             <motion.span
               layoutId="mobileNavActive"
-              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-              className="absolute inset-0 rounded-full bg-[#F3F5F6] dark:bg-[#272C33]"
+              transition={APPLE_BUBBLE_SPRING}
+              className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33]"
             />
           )}
           <ShoppingBag
@@ -534,20 +573,22 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                 : 'text-[#636B76] dark:text-[#8A929C]'
             }`}
           />
-        </button>
+        </AppleBubbleButton>
 
         {/* Tab 5: Profit & Loss Reports */}
-        <button
+        <AppleBubbleButton
           type="button"
           onClick={() => onSelectTab('reports')}
           aria-label="Profit & Loss Reports"
-          className="relative w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
+          hoverScale={1.04}
+          tapScale={0.86}
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-colors cursor-pointer"
         >
           {currentTab === 'reports' && (
             <motion.span
               layoutId="mobileNavActive"
-              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-              className="absolute inset-0 rounded-full bg-[#F3F5F6] dark:bg-[#272C33]"
+              transition={APPLE_BUBBLE_SPRING}
+              className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33]"
             />
           )}
           <BarChart3
@@ -557,7 +598,7 @@ export const FloatingIslandShell: React.FC<FloatingIslandShellProps> = ({
                 : 'text-[#636B76] dark:text-[#8A929C]'
             }`}
           />
-        </button>
+        </AppleBubbleButton>
       </nav>
 
       {/* SLIDE-OVER DRAWER FOR ALL 11 MODULES */}

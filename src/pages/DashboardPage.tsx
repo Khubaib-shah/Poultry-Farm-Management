@@ -14,6 +14,8 @@ import {
   Check,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
+import { APPLE_BUBBLE_SPRING } from '../utils/appleBubbleMotion.ts';
+import { AppleBubbleButton } from '../components/common/AppleBubbleButton.tsx';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { computeDashboardFromCollections } from '../utils/syncCalculations.ts';
@@ -227,14 +229,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             {periodButtons.map((btn) => {
               const active = period === btn.id && !showCustomDate;
               return (
-                <button
+                <AppleBubbleButton
                   key={btn.id}
                   type="button"
                   onClick={() => {
                     setPeriod(btn.id);
                     setShowCustomDate(false);
                   }}
-                  className={`relative px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors focus:outline-none cursor-pointer whitespace-nowrap shrink-0 ${
+                  hoverScale={1.03}
+                  tapScale={0.9}
+                  rippleClassName="bg-black/[0.06] dark:bg-white/[0.10]"
+                  className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors focus:outline-none cursor-pointer whitespace-nowrap shrink-0 ${
                     active
                       ? 'text-[#14161A] dark:text-[#F2F4F5]'
                       : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
@@ -243,21 +248,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   {active && (
                     <motion.span
                       layoutId="dashboardPeriodPill"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      transition={APPLE_BUBBLE_SPRING}
                       className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
                     />
                   )}
                   <span className="relative z-10">{btn.label}</span>
-                </button>
+                </AppleBubbleButton>
               );
             })}
             {(() => {
               const isCustomActive = period === 'custom' || showCustomDate;
               return (
-                <button
+                <AppleBubbleButton
                   type="button"
                   onClick={() => setShowCustomDate((v) => !v)}
-                  className={`relative px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors focus:outline-none flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 ${
+                  hoverScale={1.03}
+                  tapScale={0.9}
+                  rippleClassName="bg-black/[0.06] dark:bg-white/[0.10]"
+                  className={`px-3 py-1.5 text-[11px] font-semibold rounded-full transition-colors focus:outline-none flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 ${
                     isCustomActive
                       ? 'text-[#14161A] dark:text-[#F2F4F5]'
                       : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
@@ -266,7 +274,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   {isCustomActive && (
                     <motion.span
                       layoutId="dashboardPeriodPill"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      transition={APPLE_BUBBLE_SPRING}
                       className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
                     />
                   )}
@@ -274,7 +282,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     <Calendar className="w-3 h-3" />
                     <span>Pick Dates</span>
                   </span>
-                </button>
+                </AppleBubbleButton>
               );
             })()}
           </div>
@@ -477,11 +485,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   {(['7D', '30D', '90D'] as const).map((t) => {
                     const active = chartTimeframe === t;
                     return (
-                      <button
+                      <AppleBubbleButton
                         key={t}
                         type="button"
                         onClick={() => setChartTimeframe(t)}
-                        className={`relative px-3 py-1 rounded-full transition-colors focus:outline-none cursor-pointer whitespace-nowrap ${
+                        hoverScale={1.04}
+                        tapScale={0.9}
+                        rippleClassName="bg-black/[0.06] dark:bg-white/[0.10]"
+                        className={`px-3 py-1 rounded-full transition-colors focus:outline-none cursor-pointer whitespace-nowrap ${
                           active
                             ? 'text-[#14161A] dark:text-[#F2F4F5]'
                             : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
@@ -490,23 +501,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         {active && (
                           <motion.span
                             layoutId="dashboardChartPill"
-                            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                            transition={APPLE_BUBBLE_SPRING}
                             className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
                           />
                         )}
                         <span className="relative z-10">{t}</span>
-                      </button>
+                      </AppleBubbleButton>
                     );
                   })}
                 </div>
 
-                <button
+                <AppleBubbleButton
                   type="button"
                   onClick={() => onNavigate('reports')}
-                  className="px-3.5 py-1.5 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] text-[11px] font-bold uppercase transition shadow-xs whitespace-nowrap cursor-pointer"
+                  hoverScale={1.03}
+                  tapScale={0.9}
+                  rippleClassName="bg-black/[0.08]"
+                  className="px-3.5 py-1.5 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] text-[11px] font-bold uppercase transition-colors shadow-none whitespace-nowrap cursor-pointer"
                 >
-                  Full Report
-                </button>
+                  <span className="relative z-10">Full Report</span>
+                </AppleBubbleButton>
               </div>
             </div>
 
@@ -862,14 +876,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </p>
             </div>
 
-            <button
+            <AppleBubbleButton
               type="button"
               onClick={onOpenQuickSale}
-              className="w-full py-2.5 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition cursor-pointer"
+              hoverScale={1.02}
+              tapScale={0.92}
+              rippleClassName="bg-black/[0.08]"
+              className="w-full py-2.5 rounded-full bg-[#D4F56B] hover:bg-[#C9EE55] text-[#14161A] font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-[0_1px_2px_rgba(20,22,26,0.08)] dark:shadow-none cursor-pointer"
             >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>New Shop Sale</span>
-            </button>
+              <Plus className="relative z-10 w-4 h-4 stroke-[2.5]" />
+              <span className="relative z-10">New Shop Sale</span>
+            </AppleBubbleButton>
           </div>
 
           <div className="rounded-[20px] p-5 bg-white dark:bg-[#181B1F] border border-[#E3E6E8] dark:border-[#2A2F35] shadow-[0_1px_2px_rgba(20,22,26,0.04),0_8px_24px_rgba(20,22,26,0.06)] space-y-3">

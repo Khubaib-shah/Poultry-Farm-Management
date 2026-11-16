@@ -12,6 +12,8 @@ import {
   Check,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { APPLE_BUBBLE_SPRING } from '../utils/appleBubbleMotion.ts';
+import { AppleBubbleButton } from '../components/common/AppleBubbleButton.tsx';
 import { PurchaseLoad, StockBatch, StockMovement } from '../types/index.ts';
 import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
@@ -1029,11 +1031,14 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
           const Icon = tab.icon;
           const active = activeTab === tab.id;
           return (
-            <button
+            <AppleBubbleButton
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`relative px-4 py-2 text-xs font-semibold rounded-full transition-colors focus:outline-none flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 ${
+              hoverScale={1.03}
+              tapScale={0.9}
+              rippleClassName="bg-black/[0.06] dark:bg-white/[0.10]"
+              className={`px-4 py-2 text-xs font-semibold rounded-full transition-colors focus:outline-none flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 ${
                 active
                   ? 'text-[#14161A] dark:text-[#F2F4F5]'
                   : 'text-[#4A515B] dark:text-[#A3AAB3] hover:text-[#14161A] dark:hover:text-white'
@@ -1042,7 +1047,7 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
               {active && (
                 <motion.span
                   layoutId="trucksStockTabPill"
-                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                  transition={APPLE_BUBBLE_SPRING}
                   className="absolute inset-0 rounded-full bg-[#EDEEEF] dark:bg-[#272C33] z-0"
                 />
               )}
@@ -1055,7 +1060,7 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
                   </span>
                 )}
               </span>
-            </button>
+            </AppleBubbleButton>
           );
         })}
       </div>
