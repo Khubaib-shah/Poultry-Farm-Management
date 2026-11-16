@@ -5,6 +5,7 @@ import { api } from '../services/api.ts';
 import { AuthUser } from '../types/index.ts';
 import { useThrottledSubmit } from '../hooks/useThrottledSubmit.ts';
 import { AppleBubbleButton } from '../components/common/AppleBubbleButton.tsx';
+import { DEMO_STATIC_CREDENTIALS } from '../utils/demoData.ts';
 
 interface LoginPageProps {
   onLoginSuccess: (user: AuthUser) => void;
@@ -252,7 +253,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <span className="relative z-10">{isStartingDemo ? 'Preparing 6-Month Demo...' : 'View Demo'}</span>
             </AppleBubbleButton>
             <p className="mt-2 text-center text-[11px] text-[#636B76] dark:text-[#8A929C]">
-              Explore an isolated demo workspace with 6 months of sample shop data
+              Isolated 6-month offline demo ({DEMO_STATIC_CREDENTIALS.email} / {DEMO_STATIC_CREDENTIALS.password})
             </p>
 
             {/* Footer Separator */}

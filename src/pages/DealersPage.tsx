@@ -14,6 +14,7 @@ import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
+import { AnimatedNumber } from '../components/common/AnimatedNumber.tsx';
 import { formatPKR, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
@@ -399,7 +400,7 @@ export const DealersPage: React.FC<DealersPageProps> = ({
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black leading-none font-mono tabular-nums">
-                {formatPKR(totalDebits)}
+                <AnimatedNumber value={totalDebits} formatter={formatPKR} />
               </div>
             )}
             <p className="text-xs font-semibold opacity-85 mt-2 truncate">
@@ -424,7 +425,7 @@ export const DealersPage: React.FC<DealersPageProps> = ({
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black leading-none font-mono tabular-nums">
-                {formatPKR(totalCredits)}
+                <AnimatedNumber value={totalCredits} formatter={formatPKR} delay={0.06} />
               </div>
             )}
             <p className="text-xs font-semibold opacity-85 mt-2">Cash & bank transfers sent</p>
@@ -445,7 +446,7 @@ export const DealersPage: React.FC<DealersPageProps> = ({
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black leading-none font-mono tabular-nums">
-                {formatPKR(totalStillOwed)}
+                <AnimatedNumber value={totalStillOwed} formatter={formatPKR} delay={0.12} />
               </div>
             )}
             <p className="text-xs font-semibold opacity-85 mt-2">

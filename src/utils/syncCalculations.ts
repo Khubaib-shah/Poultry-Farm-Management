@@ -1,4 +1,4 @@
-import {
+import type {
   Supplier,
   PurchaseLoad,
   StockBatch,
@@ -9,12 +9,12 @@ import {
   DashboardData,
   ReportData,
   LoadExpenseDetail,
-} from '../types/index.ts';
+} from '../types/index.js';
 import {
   calculatePnl,
   calculatePurchaseRate,
   calculateLandedCost,
-} from './poultryMath.ts';
+} from './poultryMath.js';
 
 const PKT_OFFSET_MS = 5 * 3600000;
 const DAY_MS = 24 * 3600000;

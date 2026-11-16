@@ -1,5 +1,5 @@
-import { createPool } from './index.ts';
-import { hashPassword } from '../utils/authCrypto.ts';
+import { createPool } from './index.js';
+import { hashPassword } from '../utils/authCrypto.js';
 
 declare global {
   var _schemaReadyPromise: Promise<void> | undefined;

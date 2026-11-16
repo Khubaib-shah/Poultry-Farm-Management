@@ -9,7 +9,7 @@ import {
   extractTokenFromHeaders,
   getSessionSecret,
   resolveUserWorkspace,
-} from './authCrypto';
+} from './authCrypto.js';
 
 test('hashPassword and verifyPassword validate matching and non-matching passwords', () => {
   const hash = hashPassword('Owner1122@@');

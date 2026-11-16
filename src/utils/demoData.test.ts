@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSixMonthDemoDataset } from './demoData';
-import { getLocalPakistanDate, shiftPakistanDate } from './syncCalculations';
+import { buildSixMonthDemoDataset } from './demoData.js';
+import { getLocalPakistanDate, shiftPakistanDate } from './syncCalculations.js';
 
 test('buildSixMonthDemoDataset spans ~6 months up to live PKT today', () => {
   const fixedNow = new Date('2026-11-15T10:00:00Z');

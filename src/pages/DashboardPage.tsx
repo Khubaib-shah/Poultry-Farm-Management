@@ -21,6 +21,7 @@ import { useAppStore } from '../store/useAppStore.ts';
 import { computeDashboardFromCollections } from '../utils/syncCalculations.ts';
 import { NavItemKey } from '../components/shell/FloatingIslandShell.tsx';
 import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
+import { AnimatedNumber } from '../components/common/AnimatedNumber.tsx';
 
 interface DashboardPageProps {
   onNavigate: (tab: NavItemKey, subTab?: string) => void;
@@ -346,15 +347,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             {isInitialLoading ? (
               <div className="h-7 w-36 rounded-lg bg-black/10 animate-pulse" />
             ) : (
-              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none">
-                {formatPKR(kpis.revenue)}
+              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
+                <AnimatedNumber
+                  value={kpis.revenue}
+                  formatter={formatPKR}
+                  testId="kpi-revenue"
+                />
               </div>
             )}
             <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-[#14161A]/85">
               {isInitialLoading ? (
                 <div className="h-4 w-24 rounded-md bg-black/10 animate-pulse" />
               ) : (
-                <span>{formatNumber(kpis.totalPiecesSold)} birds sold</span>
+                <span>
+                  <AnimatedNumber value={kpis.totalPiecesSold} formatter={formatNumber} slideUp={false} /> birds sold
+                </span>
               )}
               <span className="bg-white/80 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
                 {periodLabel}
@@ -380,8 +387,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             {isInitialLoading ? (
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
-              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono">
-                {formatNumber(kpis.totalAvailableStock)} birds
+              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
+                <AnimatedNumber
+                  value={kpis.totalAvailableStock}
+                  formatter={(v) => `${formatNumber(v)} birds`}
+                  delay={0.05}
+                  testId="kpi-stock"
+                />
               </div>
             )}
             <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-[#14161A]/85">
@@ -411,22 +423,35 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             {isInitialLoading ? (
               <div className="h-7 w-36 rounded-lg bg-black/10 animate-pulse" />
             ) : (
-              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none">
-                {formatPKR(kpis.grossProfit)}
+              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
+                <AnimatedNumber
+                  value={kpis.grossProfit}
+                  formatter={formatPKR}
+                  delay={0.1}
+                  testId="kpi-gross-profit"
+                />
               </div>
             )}
             <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-[#14161A]/85">
               {isInitialLoading ? (
                 <div className="h-4 w-28 rounded-md bg-black/10 animate-pulse" />
               ) : (
-                <span>Cost of birds: {formatPKR(kpis.cogs)}</span>
+                <span>
+                  Cost of birds: <AnimatedNumber value={kpis.cogs} formatter={formatPKR} delay={0.1} slideUp={false} />
+                </span>
               )}
               <span className="bg-white/80 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-                {isInitialLoading
-                  ? '...'
-                  : kpis.revenue > 0
-                  ? `${((kpis.grossProfit / kpis.revenue) * 100).toFixed(1)}%`
-                  : '0%'}
+                {isInitialLoading ? (
+                  '...'
+                ) : (
+                  <AnimatedNumber
+                    value={kpis.revenue > 0 ? (kpis.grossProfit / kpis.revenue) * 100 : 0}
+                    decimals={1}
+                    delay={0.1}
+                    slideUp={false}
+                    formatter={(v) => `${v.toFixed(1)}%`}
+                  />
+                )}
               </span>
             </div>
           </div>
@@ -446,15 +471,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             {isInitialLoading ? (
               <div className="h-7 w-36 rounded-lg bg-black/10 animate-pulse" />
             ) : (
-              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none">
-                {formatPKR(kpis.netProfit)}
+              <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
+                <AnimatedNumber
+                  value={kpis.netProfit}
+                  formatter={formatPKR}
+                  delay={0.15}
+                  testId="kpi-net-profit"
+                />
               </div>
             )}
             <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-[#14161A]/85">
               {isInitialLoading ? (
                 <div className="h-4 w-32 rounded-md bg-black/10 animate-pulse" />
               ) : (
-                <span>Shop bills & pay: {formatPKR(kpis.generalExpenses + kpis.workerPayments)}</span>
+                <span>
+                  Shop bills & pay:{' '}
+                  <AnimatedNumber
+                    value={kpis.generalExpenses + kpis.workerPayments}
+                    formatter={formatPKR}
+                    delay={0.15}
+                    slideUp={false}
+                  />
+                </span>
               )}
               <span className="bg-white/80 text-[#14161A] px-2.5 py-0.5 rounded-full text-[11px] font-bold">
                 {isInitialLoading ? '...' : kpis.netProfit >= 0 ? 'Profit' : 'Loss'}
@@ -900,8 +938,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             {isInitialLoading ? (
               <div className="h-7 w-36 rounded-lg bg-[#EDEEEF] dark:bg-[#272C33] animate-pulse" />
             ) : (
-              <div className="text-2xl font-black font-mono text-[#F5B544]">
-                {formatPKR(kpis.dealerOutstandingBalance)}
+              <div className="text-2xl font-black font-mono text-[#F5B544] tabular-nums">
+                <AnimatedNumber
+                  value={kpis.dealerOutstandingBalance}
+                  formatter={formatPKR}
+                  delay={0.18}
+                  testId="kpi-dealer-balance"
+                />
               </div>
             )}
 

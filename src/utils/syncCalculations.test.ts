@@ -6,8 +6,8 @@ import {
   getPeriodRange,
   computeDashboardFromCollections,
   computeReportFromCollections,
-} from './syncCalculations';
-import { formatPKR, formatSignedPKR } from './formatters';
+} from './syncCalculations.js';
+import { formatPKR, formatSignedPKR } from './formatters.js';
 import type {
   Supplier,
   PurchaseLoad,
@@ -16,7 +16,7 @@ import type {
   WorkerPayment,
   BusinessExpense,
   DealerTransaction,
-} from '../types/index';
+} from '../types/index.js';
 
 const FIXED_DATE = new Date('2026-11-12T10:00:00.000Z'); // 15:00 PKT on 2026-11-12
 const NOW_ISO = '2026-11-12T10:00:00.000Z';

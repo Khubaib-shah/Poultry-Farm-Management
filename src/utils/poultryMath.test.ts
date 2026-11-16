@@ -9,7 +9,7 @@ import {
   consumeBatchesFifo,
   getCostAnalysisStatus,
   calculatePnl,
-} from './poultryMath.ts';
+} from './poultryMath.js';
 
 test('calculatePurchaseRate calculates correct PKR per KG', () => {
   assert.equal(calculatePurchaseRate(1500000, 5000), 300);

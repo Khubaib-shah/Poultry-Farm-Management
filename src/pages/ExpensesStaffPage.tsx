@@ -16,6 +16,7 @@ import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
+import { AnimatedNumber } from '../components/common/AnimatedNumber.tsx';
 import { formatPKR, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
@@ -503,7 +504,7 @@ export const ExpensesStaffPage: React.FC<ExpensesStaffPageProps> = ({
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black leading-none font-mono tabular-nums">
-                {formatPKR(grandExpenseTotal)}
+                <AnimatedNumber value={grandExpenseTotal} formatter={formatPKR} />
               </div>
             )}
             <p className="text-xs font-semibold opacity-85 mt-2">
@@ -530,7 +531,7 @@ export const ExpensesStaffPage: React.FC<ExpensesStaffPageProps> = ({
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black leading-none font-mono tabular-nums">
-                {formatPKR(grandWageTotal)}
+                <AnimatedNumber value={grandWageTotal} formatter={formatPKR} delay={0.06} />
               </div>
             )}
             <p className="text-xs font-semibold opacity-85 mt-2">
@@ -553,7 +554,7 @@ export const ExpensesStaffPage: React.FC<ExpensesStaffPageProps> = ({
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black leading-none font-mono tabular-nums">
-                {formatPKR(grandExpenseTotal + grandWageTotal)}
+                <AnimatedNumber value={grandExpenseTotal + grandWageTotal} formatter={formatPKR} delay={0.12} />
               </div>
             )}
             <p className="text-xs font-semibold opacity-85 mt-2">

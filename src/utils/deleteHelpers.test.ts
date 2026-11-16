@@ -5,7 +5,7 @@ import {
   recomputeDealerTransactionBalances,
   recalculateSaleAfterBatchRemoval,
   applyMovementDeletionToBatch,
-} from './deleteHelpers';
+} from './deleteHelpers.js';
 
 test('applySaleDeletionToBatches restores remainingPieces, decrements soldPieces, and reopens closed batch', () => {
   const batches = [

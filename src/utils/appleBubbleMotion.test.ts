@@ -5,7 +5,7 @@ import {
   APPLE_TAP_SPRING,
   APPLE_EASE_OUT,
   getAppleBubbleGestures,
-} from './appleBubbleMotion';
+} from './appleBubbleMotion.js';
 
 test('APPLE_BUBBLE_SPRING and APPLE_TAP_SPRING define underdamped responsive spring physics', () => {
   assert.equal(APPLE_BUBBLE_SPRING.type, 'spring');

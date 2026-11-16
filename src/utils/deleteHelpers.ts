@@ -1,4 +1,4 @@
-import { calculateSaleMetrics } from './poultryMath';
+import { calculateSaleMetrics } from './poultryMath.js';
 
 export interface BatchStockState {
   id: number;

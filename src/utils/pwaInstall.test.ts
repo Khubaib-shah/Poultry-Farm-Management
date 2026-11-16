@@ -4,7 +4,7 @@ import {
   detectIOSDevice,
   detectStandaloneMode,
   resolveInstallMethod,
-} from './pwaInstall.ts';
+} from './pwaInstall.js';
 
 test('detectIOSDevice identifies iPhone, iPad, iPod, and iPadOS touch Safari', () => {
   assert.equal(

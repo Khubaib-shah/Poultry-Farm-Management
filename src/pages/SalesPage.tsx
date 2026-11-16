@@ -18,6 +18,7 @@ import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
+import { AnimatedNumber } from '../components/common/AnimatedNumber.tsx';
 import { formatPKR, formatSignedPKR, formatNumber, formatDate } from '../utils/formatters.ts';
 import { useAppStore } from '../store/useAppStore.ts';
 import { getLocalPakistanDate } from '../utils/syncCalculations.ts';
@@ -597,11 +598,11 @@ export const SalesPage: React.FC<SalesPageProps> = ({
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
-                {formatPKR(walkInSummary.amount)}
+                <AnimatedNumber value={walkInSummary.amount} formatter={formatPKR} />
               </div>
             )}
             <p className="text-xs font-semibold text-[#14161A]/85 mt-2">
-              {formatNumber(walkInSummary.birds)}{' '}
+              <AnimatedNumber value={walkInSummary.birds} formatter={formatNumber} slideUp={false} />{' '}
               {walkInSummary.birds === 1 ? 'bird' : 'birds'} across {walkInSales.length}{' '}
               {walkInSales.length === 1 ? 'bill' : 'bills'}
             </p>
@@ -626,11 +627,11 @@ export const SalesPage: React.FC<SalesPageProps> = ({
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
-                {formatPKR(wholesaleSummary.amount)}
+                <AnimatedNumber value={wholesaleSummary.amount} formatter={formatPKR} delay={0.06} />
               </div>
             )}
             <p className="text-xs font-semibold text-[#14161A]/85 mt-2">
-              {formatNumber(wholesaleSummary.birds)}{' '}
+              <AnimatedNumber value={wholesaleSummary.birds} formatter={formatNumber} delay={0.06} slideUp={false} />{' '}
               {wholesaleSummary.birds === 1 ? 'bird' : 'birds'} across {wholesaleSales.length}{' '}
               {wholesaleSales.length === 1 ? 'delivery' : 'deliveries'}
             </p>
@@ -651,7 +652,11 @@ export const SalesPage: React.FC<SalesPageProps> = ({
               <div className="h-7 w-28 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
-                {formatNumber(availableStock)} {availableStock === 1 ? 'bird' : 'birds'}
+                <AnimatedNumber
+                  value={availableStock}
+                  delay={0.12}
+                  formatter={(v) => `${formatNumber(v)} ${v === 1 ? 'bird' : 'birds'}`}
+                />
               </div>
             )}
             <p className="text-xs font-semibold text-[#14161A]/85 mt-2">

@@ -24,6 +24,7 @@ import {
 } from '../utils/syncCalculations.ts';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
+import { AnimatedNumber } from '../components/common/AnimatedNumber.tsx';
 import {
   Sale,
   PurchaseLoad,
@@ -792,8 +793,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             </>
           ) : (
             <>
-              <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.totalRevenue)}</div>
-              <div className="text-[11px] font-semibold mt-1">{formatNumber(sum.totalPiecesSold)} birds sold</div>
+              <div className="text-lg font-black font-mono mt-1 tabular-nums">
+                <AnimatedNumber value={sum.totalRevenue} formatter={formatPKR} />
+              </div>
+              <div className="text-[11px] font-semibold mt-1">
+                <AnimatedNumber value={sum.totalPiecesSold} formatter={formatNumber} slideUp={false} /> birds sold
+              </div>
             </>
           )}
         </div>
@@ -803,7 +808,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
           {isInitialLoading ? (
             <div className="h-6 w-28 rounded bg-black/10 animate-pulse mt-1.5" />
           ) : (
-            <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.cogs)}</div>
+            <div className="text-lg font-black font-mono mt-1 tabular-nums">
+              <AnimatedNumber value={sum.cogs} formatter={formatPKR} delay={0.04} />
+            </div>
           )}
           <div className="text-[11px] font-semibold mt-1">Purchase + truck costs</div>
         </div>
@@ -817,8 +824,19 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             </>
           ) : (
             <>
-              <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.grossProfit)}</div>
-              <div className="text-[11px] font-semibold mt-1">{sum.grossMarginPercent}% profit</div>
+              <div className="text-lg font-black font-mono mt-1 tabular-nums">
+                <AnimatedNumber value={sum.grossProfit} formatter={formatPKR} delay={0.08} />
+              </div>
+              <div className="text-[11px] font-semibold mt-1">
+                <AnimatedNumber
+                  value={sum.grossMarginPercent}
+                  decimals={1}
+                  delay={0.08}
+                  slideUp={false}
+                  formatter={(v) => `${v.toFixed(1)}%`}
+                />{' '}
+                profit
+              </div>
             </>
           )}
         </div>
@@ -834,8 +852,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             </>
           ) : (
             <>
-              <div className="text-lg font-black font-mono mt-1 text-[#14161A] dark:text-white">
-                {formatPKR(sum.generalExpenses + sum.workerPayments)}
+              <div className="text-lg font-black font-mono mt-1 text-[#14161A] dark:text-white tabular-nums">
+                <AnimatedNumber value={sum.generalExpenses + sum.workerPayments} formatter={formatPKR} delay={0.12} />
               </div>
               <div className="text-[11px] text-[#636B76] dark:text-[#8A929C] mt-1">
                 Bills: {formatPKR(sum.generalExpenses)} · Staff: {formatPKR(sum.workerPayments)}
@@ -853,8 +871,19 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             </>
           ) : (
             <>
-              <div className="text-lg font-black font-mono mt-1">{formatPKR(sum.netProfit)}</div>
-              <div className="text-[11px] font-semibold mt-1">{sum.netMarginPercent}% left over</div>
+              <div className="text-lg font-black font-mono mt-1 tabular-nums">
+                <AnimatedNumber value={sum.netProfit} formatter={formatPKR} delay={0.16} />
+              </div>
+              <div className="text-[11px] font-semibold mt-1">
+                <AnimatedNumber
+                  value={sum.netMarginPercent}
+                  decimals={1}
+                  delay={0.16}
+                  slideUp={false}
+                  formatter={(v) => `${v.toFixed(1)}%`}
+                />{' '}
+                left over
+              </div>
             </>
           )}
         </div>
@@ -870,11 +899,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ onShowToast }) => {
             </>
           ) : (
             <>
-              <div className="text-lg font-black font-mono text-[#14161A] dark:text-[#D4F56B] mt-1">
-                {formatPKR(data.stockValuation?.totalValue || 0)}
+              <div className="text-lg font-black font-mono text-[#14161A] dark:text-[#D4F56B] mt-1 tabular-nums">
+                <AnimatedNumber value={data.stockValuation?.totalValue || 0} formatter={formatPKR} delay={0.2} />
               </div>
               <div className="text-[11px] font-semibold text-[#14161A]/80 dark:text-[#A3AAB3] mt-1">
-                {formatNumber(data.stockValuation?.totalPieces || 0)} birds left
+                <AnimatedNumber value={data.stockValuation?.totalPieces || 0} formatter={formatNumber} delay={0.2} slideUp={false} /> birds left
               </div>
             </>
           )}

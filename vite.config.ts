@@ -4,7 +4,7 @@ import path from 'path';
 import { defineConfig, Plugin } from 'vite';
 import express from 'express';
 import { VitePWA } from 'vite-plugin-pwa';
-import { apiRouter } from './src/server/api.ts';
+import { apiRouter } from './src/server/api.js';
 
 const apiApp = express();
 apiApp.use(express.json());

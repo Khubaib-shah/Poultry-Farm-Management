@@ -19,6 +19,7 @@ import { Modal } from '../components/common/Modal.tsx';
 import { Select } from '../components/common/Select.tsx';
 import { DataTable, DataTableColumn } from '../components/common/DataTable.tsx';
 import { ConfirmDeleteButton } from '../components/common/ConfirmDeleteButton.tsx';
+import { AnimatedNumber } from '../components/common/AnimatedNumber.tsx';
 import { formatPKR, formatNumber, formatDate, formatDateTime } from '../utils/formatters.ts';
 import {
   calculatePurchaseRate,
@@ -926,7 +927,10 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
               <div className="h-7 w-32 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
-                {formatNumber(totalStockPieces)} {totalStockPieces === 1 ? 'bird' : 'birds'}
+                <AnimatedNumber
+                  value={totalStockPieces}
+                  formatter={(v) => `${formatNumber(v)} ${v === 1 ? 'bird' : 'birds'}`}
+                />
               </div>
             )}
             <p className="text-xs font-semibold text-[#14161A]/85 mt-2">
@@ -953,7 +957,7 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
               <div className="h-7 w-36 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
-                {formatPKR(totalStockValue)}
+                <AnimatedNumber value={totalStockValue} formatter={formatPKR} delay={0.06} />
               </div>
             )}
             <p className="text-xs font-semibold text-[#14161A]/85 mt-2">
@@ -983,7 +987,11 @@ export const TrucksStockPage: React.FC<TrucksStockPageProps> = ({
               <div className="h-7 w-28 rounded-lg bg-black/10 animate-pulse" />
             ) : (
               <div className="text-[24px] sm:text-[26px] font-black tracking-tight leading-none font-mono tabular-nums">
-                {loads.length} {loads.length === 1 ? 'truck' : 'trucks'}
+                <AnimatedNumber
+                  value={loads.length}
+                  delay={0.12}
+                  formatter={(v) => `${formatNumber(v)} ${v === 1 ? 'truck' : 'trucks'}`}
+                />
               </div>
             )}
             <p className="text-xs font-semibold text-[#14161A]/85 mt-2">

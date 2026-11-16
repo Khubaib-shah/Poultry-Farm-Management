@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSubmitThrottle, createStoreMutationGuard } from './submitThrottle';
+import { createSubmitThrottle, createStoreMutationGuard } from './submitThrottle.js';
 
 test('createSubmitThrottle blocks concurrent double-clicks synchronously', async () => {
   let clock = 1000;

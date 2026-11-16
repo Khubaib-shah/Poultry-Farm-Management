@@ -7,7 +7,7 @@ import {
   computePaginationMeta,
   parseServerPaginationParams,
   sortAndPaginateRecords,
-} from './paginationCache';
+} from './paginationCache.js';
 
 test('computePaginationMeta calculates pages, row range, and ellipsis accurately', () => {
   assert.deepEqual(

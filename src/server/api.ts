@@ -1,6 +1,6 @@
 import express, { NextFunction, Request, Response } from 'express';
-import { db } from '../db/index.ts';
-import { ensureSchema } from '../db/ensureSchema.ts';
+import { db } from '../db/index.js';
+import { ensureSchema } from '../db/ensureSchema.js';
 import {
   users,
   suppliers,
@@ -17,7 +17,7 @@ import {
   workerPayments,
   businessExpenses,
   settings,
-} from '../db/schema.ts';
+} from '../db/schema.js';
 import { eq, desc, asc, and, gte, lte, inArray, sql } from 'drizzle-orm';
 import {
   calculatePurchaseRate,
@@ -27,13 +27,13 @@ import {
   calculateSaleMetrics,
   consumeBatchesFifo,
   calculatePnl,
-} from '../utils/poultryMath.ts';
+} from '../utils/poultryMath.js';
 import {
   applySaleDeletionToBatches,
   recomputeDealerTransactionBalances,
   recalculateSaleAfterBatchRemoval,
   applyMovementDeletionToBatch,
-} from '../utils/deleteHelpers.ts';
+} from '../utils/deleteHelpers.js';
 import {
   verifyPassword,
   signSessionToken,
@@ -43,12 +43,12 @@ import {
   resolveUserWorkspace,
   SessionPayload,
   WorkspaceMode,
-} from '../utils/authCrypto.ts';
-import { buildSixMonthDemoDataset } from '../utils/demoData.ts';
+} from '../utils/authCrypto.js';
+import { buildSixMonthDemoDataset } from '../utils/demoData.js';
 import {
   parseServerPaginationParams,
   sortAndPaginateRecords,
-} from '../utils/paginationCache.ts';
+} from '../utils/paginationCache.js';
 
 const SESSION_COOKIE_NAME = 'checkin_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
